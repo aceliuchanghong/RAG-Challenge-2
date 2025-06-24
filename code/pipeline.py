@@ -2,17 +2,27 @@ from pathlib import Path
 import pypdf
 import docx
 import pptx
+from typing import List, Union
 
 from .common import DocumentType
 from .chunking import CustomRecursiveCharacterTextSplitter
 from .ingest_with_lancedb import LanceDBIngestor
+from .questions_processing import QuestionsProcessor
 
 
 class Pipeline:
-    def __init__(self, root_path: Path):
+    def __init__(
+        self,
+        root_path: Path,
+        db_path: Union[str, Path] = "./lancedb",
+        table_name: str = "file_chunks",
+    ):
         """Initialize the pipeline."""
         self.root_path = root_path
-        self.ingestor = LanceDBIngestor()
+        self.db_path = db_path
+        self.table_name = table_name
+        self.ingestor = None
+        self.questions_processor = None
 
     def read_file(self, file_path: str) -> str:
         """
@@ -20,10 +30,8 @@ class Pipeline:
         Supports file types defined in DocumentType enum.
         """
         path = Path(file_path)
-        extension = path.suffix[1:].lower()  # 获取后缀名并转为小写, 如: "pdf"
-
+        extension = path.suffix[1:].lower()
         content = ""
-
         if extension in DocumentType.pdf.value:
             # 处理 PDF 文件
             with open(path, "rb") as f:
@@ -44,17 +52,13 @@ class Pipeline:
                 for shape in slide.shapes:
                     if hasattr(shape, "text"):
                         content += shape.text + "\n"
-
         elif (
             extension in DocumentType.markdown.value
             or extension in DocumentType.text.value
         ):
-            # 处理 Markdown 和纯文本文件
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-
         else:
-            # 如果文件类型不支持，则抛出异常
             supported_types = [
                 ext for doc_type in DocumentType for ext in doc_type.value
             ]
@@ -83,12 +87,25 @@ class Pipeline:
         """
         处理所有报告，并将数据分批次存入 LanceDB。
 
-        # 连接到数据库并打开表
+        连接到数据库并打开表
         db = lancedb.connect(LANCEDB_PATH)
         table = db.open_table("file_chunks")
 
-        # 转换为 Pandas DataFrame 查看前 10 条数据
+        转换为 Pandas DataFrame 查看前 10 条数据
         df_head = table.limit(10).to_pandas()
         print(df_head)
         """
+        self.ingestor = LanceDBIngestor(self.db_path)
         self.ingestor.process_and_ingest_reports(report_or_reports_dir, table_name)
+
+    def answer_questions(self, question: str) -> List[str]:
+        """
+        Process a list of questions and return answers.
+        """
+        self.questions_processor = QuestionsProcessor(self.db_path, self.table_name)
+        print(f"processing:{question}...")
+        question_related_docs = self.questions_processor.find_question_related_docs(
+            question
+        )
+
+        return question_related_docs

@@ -1,6 +1,5 @@
 import os
 import json
-from typing import List
 from pathlib import Path
 from tqdm import tqdm
 import lancedb
@@ -11,7 +10,6 @@ from tenacity import retry, wait_fixed, stop_after_attempt
 from typing import List, Union, Optional
 import jieba
 
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -50,7 +48,7 @@ class LanceDBIngestor:
         self,
         db_path: Union[str, Path] = "./lancedb",
     ):
-        self.llm = OpenAI(
+        self.emb = OpenAI(
             api_key=os.getenv("EMB_API_KEY"),
             base_url=os.getenv("EMB_BASE_URL"),
             max_retries=2,
@@ -73,7 +71,7 @@ class LanceDBIngestor:
         if not texts:
             return []
 
-        response = self.llm.embeddings.create(input=texts, model=model)
+        response = self.emb.embeddings.create(input=texts, model=model)
         return [embedding.embedding for embedding in response.data]
 
     def _open_or_create_table(self, table_name: str):
@@ -237,7 +235,9 @@ class LanceDBIngestor:
         except Exception as e:
             print(f"An error occurred during deletion: {e}")
 
-    def keyword_search(self, query: str, limit: int = 2, do_print: bool = True):
+    def keyword_search(
+        self, query: str, limit: int = 2, do_print: bool = True
+    ) -> List[LanceModel]:
         """
         执行基于关键字的全文搜索 (FTS)。
         """
@@ -253,7 +253,9 @@ class LanceDBIngestor:
                 print(f"    文本: {res.text[:150]}...\n")
         return results
 
-    def vector_search(self, query: str, limit: int = 1, do_print: bool = True):
+    def vector_search(
+        self, query: str, limit: int = 1, do_print: bool = True
+    ) -> List[LanceModel]:
         """
         执行基于向量的语义相似度搜索。
         """

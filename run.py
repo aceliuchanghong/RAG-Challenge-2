@@ -3,7 +3,6 @@ import os
 from termcolor import colored
 from pathlib import Path
 import json
-
 from code.pipeline import Pipeline
 from z_utils.hash_x import compute_mdhash_id
 
@@ -105,6 +104,28 @@ def save_jsonl(jsonl_path_or_dir, table_name):
         click.echo(colored(f"An unexpected error occurred: {e}", "red"))
 
 
+@cli.command()
+@click.option("--question")
+def answer_question(question: str) -> list[str]:
+    """
+    Process question and return answer using the pipeline.
+    """
+    try:
+        pipeline = Pipeline(root_path)
+        answer = pipeline.answer_questions(question)
+        if answer is None:
+            click.echo(colored("Pipeline 没有返回结果。", "red"))
+        else:
+            print("=" * 50)
+            click.echo(colored(f"Q: {question}", "blue"))
+            click.echo(colored(f"A: {answer}", "green"))
+            print("=" * 50)
+        return answer
+    except Exception as e:
+        click.echo(colored(f"发生意外错误: {e}", "red"))
+        return None
+
+
 if __name__ == "__main__":
     """
     uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
@@ -113,5 +134,11 @@ if __name__ == "__main__":
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_2a756c2048842968844b3d504cfd33b0.jsonl
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md --table-name new_test
+
+    uv run run.py answer-question --question "流式细胞制备如何操作?"
+
+    uv run run.py read-files --file-path no_git_oic/test_files/三国演义.docx
+    uv run run.py chunk-markdown --md-file-path output/md/md_c6f5b8c6fc281b49f3b50cc778c5cecc.md
+    uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6fc281b49f3b50cc778c5cecc.jsonl
     """
     cli()
