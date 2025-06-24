@@ -8,7 +8,7 @@ from lancedb.pydantic import LanceModel, Vector
 from dotenv import load_dotenv
 from openai import OpenAI
 from tenacity import retry, wait_fixed, stop_after_attempt
-from typing import List, Union
+from typing import List, Union, Optional
 import jieba
 
 from dotenv import load_dotenv
@@ -28,11 +28,11 @@ https://lancedb.github.io/lancedb/python/python/
 class LanceDBSchema(LanceModel):
     """定义数据模型 (Schema)"""
 
-    text: str  # 原始文本块内容
-    text_for_fts: str  # 分词后的文本，用于FTS索引
+    text: Optional[str]  # 原始文本块内容
+    text_for_fts: Optional[str]  # 分词后的文本，用于FTS索引
     vector: Vector(2560)  # 文本对应的向量
-    report_sha1: str  # 该文本块所属报告的SHA1标识符
-    chunk_id: int  # 文本块在原报告中的索引位置
+    report_sha1: Optional[str]  # 该文本块所属报告的SHA1标识符
+    chunk_id: Optional[int]  # 文本块在原报告中的索引位置
 
 
 class LanceDBIngestor:
@@ -46,21 +46,19 @@ class LanceDBIngestor:
     4. 在文本字段上创建全文搜索 FTS 索引。
     """
 
-    def __init__(self, db_path: Union[str, Path] = "./lancedb"):
-        # 设置 OpenAI 客户端
-        load_dotenv()
+    def __init__(
+        self,
+        db_path: Union[str, Path] = "./lancedb",
+    ):
         self.llm = OpenAI(
             api_key=os.getenv("EMB_API_KEY"),
             base_url=os.getenv("EMB_BASE_URL"),
             max_retries=2,
         )
-        # 连接到 LanceDB 数据库（如果不存在，则会自动创建）
         self.db = lancedb.connect(db_path)
-        self.table = self.db.create_table(
-            "file_chunks", schema=LanceDBSchema, mode="overwrite"
-        )
+        self.table_name = None
 
-    @retry(wait=wait_fixed(20), stop=stop_after_attempt(3))
+    @retry(wait=wait_fixed(10), stop=stop_after_attempt(2))
     def _get_embeddings(
         self, texts: List[str], model: str = "Qwen3-Embedding-4B"
     ) -> List[List[float]]:
@@ -78,14 +76,39 @@ class LanceDBIngestor:
         response = self.llm.embeddings.create(input=texts, model=model)
         return [embedding.embedding for embedding in response.data]
 
-    def process_and_ingest_reports(self, all_reports_dir: Path):
+    def _open_or_create_table(self, table_name: str):
+        """内部辅助函数，用于打开或创建表"""
+        try:
+            if table_name in self.db.table_names():
+                self.table = self.db.open_table(table_name)
+            else:
+                print(f"Table '{table_name}' not found, creating new one.")
+                self.table = self.db.create_table(table_name, schema=LanceDBSchema)
+        except lancedb.errors.LanceDBError as e:
+            print(f"Error opening or creating table '{table_name}': {e}")
+            raise
+
+    def process_and_ingest_reports(
+        self, report_or_reports_dir: Union[str, Path], table_name="file_chunks"
+    ):
         """
         处理所有报告，并将数据分批次存入 LanceDB。
         """
-        all_report_paths = list(all_reports_dir.glob("*.jsonl"))
-        print(f"{all_report_paths}")
+        self._open_or_create_table(table_name)
+        path = Path(report_or_reports_dir)
 
-        # 使用一个列表来收集所有待添加的数据
+        if path.is_dir():
+            # 如果是目录，递归查找所有 .jsonl 文件
+            all_report_paths = list(path.glob("*.jsonl"))
+        elif path.is_file() and path.suffix == ".jsonl":
+            # 如果是单个 .jsonl 文件
+            all_report_paths = [path]
+        else:
+            raise ValueError(
+                f"Invalid input: {report_or_reports_dir} 是无效的文件或目录，且不为 .jsonl 文件。"
+            )
+
+        # 所有待添加的数据
         all_data_to_add = []
 
         for report_path in tqdm(all_report_paths, desc="[1/3] 解析报告并生成向量"):
@@ -119,47 +142,131 @@ class LanceDBIngestor:
                     }
                 )
 
-        # 将所有数据一次性添加到表中，效率最高
         if all_data_to_add:
-            print(f"\n[2/3] 正在向 LanceDB 表中添加 {len(all_data_to_add)} 个数据块...")
-            self.table.add(all_data_to_add)
-            print("数据添加完成。")
+            print(
+                f"[2/3] 正在向 LanceDB 表中合并 {len(all_data_to_add)} 个数据块 (Upsert)..."
+            )
+            self.table.merge_insert(
+                on=["report_sha1", "chunk_id"]
+            ).when_matched_update_all().when_not_matched_insert_all().execute(
+                all_data_to_add
+            )
 
-        # 在 'text_for_fts' 字段上创建全文搜索 (FTS) 索引，用于关键字搜索
         print("[3/3] 正在创建全文搜索 (FTS) 索引...")
         self.table.create_fts_index("text_for_fts", replace=True)
         print("FTS 索引创建完成。")
 
-        print(f"\n处理了 {len(all_report_paths)} 个报告，数据库构建完成！")
+        print(f"处理了 {len(all_report_paths)} 个报告，数据库构建完成！\n")
 
-    def keyword_search(self, query: str, limit: int = 2):
+    def delete_reports(
+        self, target: Union[str, Path, List[str]], table_name="file_chunks"
+    ):
+        """
+        根据目标删除 LanceDB 中的数据。
+
+        目标可以是:
+        - 单个报告的 SHA1 (str)
+        - 多个报告 SHA1 的列表 (List[str])
+        - 单个 .jsonl 文件的路径 (str or Path)
+        - 包含多个 .jsonl 文件的目录路径 (str or Path)
+        """
+        if table_name not in self.db.table_names():
+            print(f"Table '{table_name}' not found. Nothing to delete.")
+            return
+
+        self.table = self.db.open_table(table_name)
+        sha1s_to_delete = []
+
+        if isinstance(target, list):
+            sha1s_to_delete = target
+        elif isinstance(target, str) and not Path(target).exists():
+            # 假定这是一个单独的SHA1字符串，而不是一个路径
+            sha1s_to_delete = [target]
+        else:
+            # 处理文件或目录路径
+            path = Path(target)
+            if path.is_file() and path.suffix == ".jsonl":
+                with open(path, "r", encoding="utf-8") as f:
+                    sha1s_to_delete.append(json.load(f)["file_hash"])
+            elif path.is_dir():
+                for report_path in path.glob("*.jsonl"):
+                    try:
+                        with open(report_path, "r", encoding="utf-8") as f:
+                            sha1s_to_delete.append(json.load(f)["file_hash"])
+                    except (json.JSONDecodeError, KeyError) as e:
+                        print(f"Warning: Could not read SHA1 from {report_path}: {e}")
+            else:
+                raise ValueError(f"Invalid target for deletion: {target}")
+
+        if not sha1s_to_delete:
+            print("No valid SHA1s found for deletion.")
+            return
+
+        # 构建 SQL WHERE IN 子句
+        # 例如: "report_sha1 IN ('sha1_A', 'sha1_B')"
+        formatted_sha1s = ", ".join([f"'{s}'" for s in sha1s_to_delete])
+        delete_condition = f"report_sha1 IN ({formatted_sha1s})"
+
+        print(f"正在从表 '{table_name}' 中删除 {len(sha1s_to_delete)} 个报告的数据...")
+        print(f"执行删除条件: {delete_condition}")
+
+        try:
+            self.table.delete(delete_condition)
+            print("删除操作完成。")
+        except Exception as e:
+            print(f"An error occurred during deletion: {e}")
+
+    def delete_chunk(self, report_sha1: str, chunk_id: int, table_name="file_chunks"):
+        """
+        根据报告SHA1和块ID删除单个数据块。
+        """
+        if table_name not in self.db.table_names():
+            print(f"Table '{table_name}' not found. Nothing to delete.")
+            return
+
+        self.table = self.db.open_table(table_name)
+
+        delete_condition = f"report_sha1 = '{report_sha1}' AND chunk_id = {chunk_id}"
+
+        print(f"正在从表 '{table_name}' 中删除块...")
+        print(f"执行删除条件: {delete_condition}")
+
+        try:
+            self.table.delete(delete_condition)
+            print("删除操作完成。")
+        except Exception as e:
+            print(f"An error occurred during deletion: {e}")
+
+    def keyword_search(self, query: str, limit: int = 2, do_print: bool = True):
         """
         执行基于关键字的全文搜索 (FTS)。
         """
-        print(f"\n--- 关键字搜索: '{query}' ---")
+        if do_print:
+            print(f"--- 关键字搜索: '{query}' ---")
         segmented_query = " ".join(jieba.cut_for_search(query))
         results = (
             self.table.search(segmented_query).limit(limit).to_pydantic(LanceDBSchema)
         )
-        for res in results:
-            print(f"  - [报告SHA1: {res.report_sha1}, 块ID: {res.chunk_id}]")
-            print(f"    文本: {res.text[:150]}...\n")
+        if do_print:
+            for res in results:
+                print(f"  - [报告SHA1: {res.report_sha1}, 块ID: {res.chunk_id}]")
+                print(f"    文本: {res.text[:150]}...\n")
         return results
 
-    def vector_search(self, query: str, limit: int = 1):
+    def vector_search(self, query: str, limit: int = 1, do_print: bool = True):
         """
         执行基于向量的语义相似度搜索。
         """
-        print(f"\n--- 向量搜索: '{query}' ---")
-        # 1. 获取查询语句的向量
+        if do_print:
+            print(f"--- 向量搜索: '{query}' ---")
         query_vector = self._get_embeddings([query])[0]
-        # 2. 在向量列上进行搜索
         results = (
             self.table.search(query_vector).limit(limit).to_pydantic(LanceDBSchema)
         )
-        for res in results:
-            print(f"  - [报告SHA1: {res.report_sha1}, 块ID: {res.chunk_id}]")
-            print(f"    文本: {res.text[:150]}...\n")
+        if do_print:
+            for res in results:
+                print(f"  - [报告SHA1: {res.report_sha1}, 块ID: {res.chunk_id}]")
+                print(f"    文本: {res.text[:150]}...\n")
         return results
 
 
@@ -173,23 +280,18 @@ if __name__ == "__main__":
 
     print("=" * 50)
     print("开始构建 LanceDB 数据库...")
-    ingestor = LanceDBIngestor(db_path=LANCEDB_PATH)
+    ingestor = LanceDBIngestor()
     ingestor.process_and_ingest_reports(REPORTS_DIR)
     print("=" * 50)
 
-    #  ingestion 和 searching 可以是两个独立的脚本
-    print("\n数据库已就绪，开始演示搜索功能...")
-
-    # 重新连接数据库进行查询（模拟一个独立的应用）
+    # 连接数据库
     db_for_query = lancedb.connect(LANCEDB_PATH)
     table_for_query = db_for_query.open_table("file_chunks")
 
     # a) 关键字搜索 (类似于 BM25)
     keyword_query = "锥形离心试管"
     results_fts = ingestor.keyword_search(keyword_query)
-    print(results_fts)
 
     # b) 向量搜索 (语义搜索)
     vector_query = "锥形离心试管"
     results_vec = ingestor.vector_search(keyword_query)
-    print(results_vec)

@@ -84,9 +84,34 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
         click.echo(colored(f"An unexpected error occurred: {e}", "red"))
 
 
+@cli.command()
+@click.option("--jsonl-path-or-dir", default="output/chunked_md", help="path or dir")
+@click.option("--table-name", default="file_chunks")
+def save_jsonl(jsonl_path_or_dir, table_name):
+    """save jsonl files to LanceDB"""
+    try:
+        pipeline = Pipeline(root_path)
+        pipeline.save2lacncedb(
+            report_or_reports_dir=jsonl_path_or_dir, table_name=table_name
+        )
+        click.echo(
+            colored(
+                f"Successfully saved JSONL files to LanceDB table '{table_name}'",
+                "green",
+            )
+        )
+        return table_name
+    except Exception as e:
+        click.echo(colored(f"An unexpected error occurred: {e}", "red"))
+
+
 if __name__ == "__main__":
     """
     uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
     uv run run.py chunk-markdown --md-file-path output/md/md_2a756c2048842968844b3d504cfd33b0.md
+
+    uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_2a756c2048842968844b3d504cfd33b0.jsonl
+    uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md
+    uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md --table-name new_test
     """
     cli()

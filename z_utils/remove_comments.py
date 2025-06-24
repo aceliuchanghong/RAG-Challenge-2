@@ -57,6 +57,9 @@ if __name__ == "__main__":
     uv run z_utils/remove_comments.py \
         --input run.py \
         --output 00.py
+    uv run z_utils/remove_comments.py \
+        --input code/ingest_with_lancedb.py \
+        --output 00.py
     """
     parser = argparse.ArgumentParser(description="Remove comments from a Python file.")
     parser.add_argument(

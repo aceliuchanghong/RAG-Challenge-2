@@ -183,18 +183,203 @@ class TextSplitter():
 
 ---
 
+1. lancedb存储之后数据如下,我怎么迁移呢?
+2. `ingestor = LanceDBIngestor(db_path=LANCEDB_PATH)`每次都需要新创建一个表吗?
+3. 如果所有数据都存一个表里面,会不会不太好?
+4. 插入数据时,不能存在了就最多更新,而不是插入一条新的记录吗
+5. 我怎么可视化看的见数据存了那些数据呢?我允许了很多遍相同代码,我担心数据重复冗余太多
 
+```
+lancedb/
+|
+└── file_chunks.lance/
+    ├── _indices/
+    │   ├── 05b0dbcf-b3d6-419c-bbab-7b4919d47b08/
+    │   │   ├── metadata.lance
+    │   │   ├── part_0_docs.lance
+    │   │   ├── part_0_invert.lance
+    │   │   └── part_0_tokens.lance
+    │       ├── metadata.lance
+    │       ├── part_6_docs.lance
+    │       ├── part_6_invert.lance
+    │       └── part_6_tokens.lance
+    ├── _transactions/
+    │   ├── 0-b7550b92-de81-4e4f-9934-070762d3a22f.txn
+    │   └── 9-e9e1e515-235b-43dd-83c6-85fb1e83ed2f.txn
+    ├── _versions/
+    │   ├── 1.manifest
+    │   ├── 8.manifest
+    │   └── 9.manifest
+    └── data/
+        ├── 2aa4738a-0cba-4739-9977-f45e515b5a15.lance
+        ├── 33b9a896-fead-4b28-ae8c-dffd4dcf9be9.lance
+```
+
+```python
+class LanceDBIngestor:
+    def __init__(self, db_path: Union[str, Path] = "./lancedb"):
+        load_dotenv()
+        self.llm = OpenAI(
+            api_key=os.getenv("EMB_API_KEY"),
+            base_url=os.getenv("EMB_BASE_URL"),
+            max_retries=2,
+        )
+        self.db = lancedb.connect(db_path)
+        self.table = self.db.create_table(
+            "file_chunks", schema=LanceDBSchema, mode="overwrite"
+        )
+    @retry(wait=wait_fixed(20), stop=stop_after_attempt(3))
+    def _get_embeddings(
+        self, texts: List[str], model: str = "Qwen3-Embedding-4B"
+    ) -> List[List[float]]:
+        if not texts:
+            return []
+        texts = [t.replace("\n", " ") for t in texts if t.strip()]
+        if not texts:
+            return []
+        response = self.llm.embeddings.create(input=texts, model=model)
+        return [embedding.embedding for embedding in response.data]
+    def process_and_ingest_reports(self, all_reports_dir: Path):
+        all_report_paths = list(all_reports_dir.glob("*.jsonl"))
+        print(f"{all_report_paths}")
+        all_data_to_add = []
+        for report_path in tqdm(all_report_paths, desc="[1/3] 解析报告并生成向量"):
+            with open(report_path, "r", encoding="utf-8") as f:
+                report_data = json.load(f)
+            sha1_name = report_data["file_hash"]
+            text_chunks = [chunk["content"] for chunk in report_data["chunks"]]
+            page_nums = [chunk["page_num"] for chunk in report_data["chunks"]]
+            embeddings = self._get_embeddings(text_chunks)
+            if len(text_chunks) != len(embeddings):
+                print(f"警告: 报告 {sha1_name} 的文本块和向量数量不匹配。跳过此报告。")
+                continue
+            for _, (i, text, vector) in enumerate(
+                zip(page_nums, text_chunks, embeddings)
+            ):
+                segmented_text = " ".join(jieba.cut_for_search(text))
+                all_data_to_add.append(
+                    {
+                        "text": text,
+                        "text_for_fts": segmented_text,
+                        "vector": vector,
+                        "report_sha1": sha1_name,
+                        "chunk_id": i,
+                    }
+                )
+        if all_data_to_add:
+            print(f"\n[2/3] 正在向 LanceDB 表中添加 {len(all_data_to_add)} 个数据块...")
+            self.table.add(all_data_to_add)
+            print("数据添加完成。")
+        print("[3/3] 正在创建全文搜索 (FTS) 索引...")
+        self.table.create_fts_index("text_for_fts", replace=True)
+        print("FTS 索引创建完成。")
+        print(f"\n处理了 {len(all_report_paths)} 个报告，数据库构建完成！")
+    def keyword_search(self, query: str, limit: int = 2):
+        print(f"\n--- 关键字搜索: '{query}' ---")
+        segmented_query = " ".join(jieba.cut_for_search(query))
+        results = (
+            self.table.search(segmented_query).limit(limit).to_pydantic(LanceDBSchema)
+        )
+        for res in results:
+            print(f"  - [报告SHA1: {res.report_sha1}, 块ID: {res.chunk_id}]")
+            print(f"    文本: {res.text[:150]}...\n")
+        return results
+    def vector_search(self, query: str, limit: int = 1):
+        print(f"\n--- 向量搜索: '{query}' ---")
+        query_vector = self._get_embeddings([query])[0]
+        results = (
+            self.table.search(query_vector).limit(limit).to_pydantic(LanceDBSchema)
+        )
+        for res in results:
+            print(f"  - [报告SHA1: {res.report_sha1}, 块ID: {res.chunk_id}]")
+            print(f"    文本: {res.text[:150]}...\n")
+```
+
+---
+
+`lancedb/` 目录结构本身就是完整的数据库。这是 LanceDB 作为一个嵌入式、无服务器数据库的核心优势之一。
+**迁移方法非常简单：直接复制整个 `lancedb` 目录即可。**
+
+可以通过将 LanceDB 表转换为常见的 Python 数据分析库（如 Pandas）的格式来轻松查看和分析数据。
+
+```python
+import pandas as pd
+import lancedb
+
+# 连接数据库
+db = lancedb.connect("./lancedb")  # 使用您的数据库路径
+table = db.open_table("file_chunks")
+
+# 将整个表加载到 Pandas DataFrame
+# 如果表非常大，这可能会消耗很多内存。
+print("正在加载数据到 Pandas... (如果数据量大，可能需要一些时间)")
+df = table.to_pandas()
+print("数据加载完成。")
+
+# 定义唯一标识符列
+primary_keys = ["report_sha1", "chunk_id"]
+
+# 查找重复的行
+# keep=False 会标记所有重复项，而不仅仅是第二个及以后的
+duplicates = df[df.duplicated(subset=primary_keys, keep=False)]
+
+if not duplicates.empty:
+    print("\n!!! 发现重复记录 !!!")
+    # 按主键排序，以便更容易地看到重复组
+    print(duplicates.sort_values(by=primary_keys))
+else:
+    print("\n恭喜！未在表中发现基于 (report_sha1, chunk_id) 的重复记录。")
+
+# 也可以查看重复项的统计信息
+print(f"\n总行数: {len(df)}")
+print(f"重复行数: {len(duplicates)}")
+print(
+    f"唯一 (report_sha1, chunk_id) 组合的数量: {len(df.drop_duplicates(subset=primary_keys))}"
+)
+```
+
+---
+
+还有个问题,正如上面看见的`lancedb`的目录,似乎每次运行,该目录就会增加很多文件
+
+
+LanceDB 和许多现代数据系统（如 Delta Lake）一样，其核心设计是基于**不可变数据文件**的。这意味着：
+
+1.  **数据文件一旦写入，就不会被修改。** 当您向表中添加或更新数据时，LanceDB 不会去改变现有的数据文件。相反，它会写入包含新数据或更新后数据的**新文件**。
+2.  **所有操作都是通过版本控制来管理的。** 每一次成功的写入操作（如 `add`, `create_table`, `create_fts_index`）都会创建一个新的**版本**。
+
+这个机制被称为 多版本并发控制 (MVCC)。现在我们来结合您看到的目录结构解释这个过程：
+
+  * `data/`: 这个目录存放着实际的数据块（`.lance` 文件）。当您调用 `table.add()` 时，新的数据会被写入一个新的或多个新的 `.lance` 文件中。
+  * `_versions/`: 这是版本控制的核心。每次您成功提交一个事务（比如一次数据添加），这里就会生成一个新的清单文件（`X.manifest`）。这个清单文件是一个小小的元数据文件，它记录了构成当前表“版本X”的所有数据文件是 `data/` 目录下的哪些文件。
+  * `_transactions/`: 用于确保操作的原子性。在写入新版本之前，会先创建一个事务文件。操作成功后，事务被提交，并生成新的 `.manifest` 文件。这可以防止数据库在写入过程中因意外中断而损坏。
+  * `_indices/`: 当您创建或更新索引时（例如 `create_fts_index`），索引本身的数据也会被写入这个目录下的新文件中。
 
 
 ---
 
+lancedb如何回退某个表的版本呢?
 
+```python
+import lancedb
+import pandas as pd
 
+db = lancedb.connect("./my_db")
+table = db.open_table("my_table")
+versions = table.list_versions()
 
----
+# 恢复到版本 1
+table.restore(1)
+# checkout 到该版本
+table.checkout(1)
+```
 
-
-
+| 功能 | `checkout(version)` | `restore(version)` |
+| :--- | :--- | :--- |
+| **操作性质** | 只读（临时切换） | 写（永久恢复） |
+| **是否创建新版本** | 否 | 是 |
+| **主要用途** | 数据查看、分析、调试 | 数据恢复、错误修正 |
+| **对后续操作的影响** | 不影响表的最新状态，可随时 `checkout_latest()` | 创建一个新的“最新”版本，后续写入将在此基础上进行 |
 
 ---
 

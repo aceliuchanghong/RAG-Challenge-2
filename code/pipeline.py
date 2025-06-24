@@ -4,13 +4,15 @@ import docx
 import pptx
 
 from .common import DocumentType
-from code.chunking import CustomRecursiveCharacterTextSplitter
+from .chunking import CustomRecursiveCharacterTextSplitter
+from .ingest_with_lancedb import LanceDBIngestor
 
 
 class Pipeline:
     def __init__(self, root_path: Path):
         """Initialize the pipeline."""
         self.root_path = root_path
+        self.ingestor = LanceDBIngestor()
 
     def read_file(self, file_path: str) -> str:
         """
@@ -74,3 +76,19 @@ class Pipeline:
             chunk_overlap=chunk_overlap,
         )
         return splitter.split_text(md_file_path)
+
+    def save2lacncedb(
+        self, report_or_reports_dir: str, table_name: str = "file_chunks"
+    ):
+        """
+        处理所有报告，并将数据分批次存入 LanceDB。
+
+        # 连接到数据库并打开表
+        db = lancedb.connect(LANCEDB_PATH)
+        table = db.open_table("file_chunks")
+
+        # 转换为 Pandas DataFrame 查看前 10 条数据
+        df_head = table.limit(10).to_pandas()
+        print(df_head)
+        """
+        self.ingestor.process_and_ingest_reports(report_or_reports_dir, table_name)
