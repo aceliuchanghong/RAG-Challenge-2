@@ -99,11 +99,12 @@ class Pipeline:
         self.ingestor.process_and_ingest_reports(report_or_reports_dir, table_name)
 
     def find_question_related_docs(
-        self, question: str, complicated_question: bool = True
+        self, question: str, table_name, complicated_question: bool = True
     ) -> List[str]:
         """
         Process a list of questions and return answers.
         """
+        self.table_name = table_name
         self.questions_processor = QuestionsProcessor(self.db_path, self.table_name)
         print(f"processing:{question}...")
         question_related_docs = self.questions_processor.find_question_related_docs(

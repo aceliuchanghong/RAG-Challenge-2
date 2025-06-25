@@ -8,6 +8,7 @@ import shutil
 from openai import OpenAI
 import time
 
+from code.common import extract_hash
 from z_utils.hash_x import compute_mdhash_id
 from code.prompt import PROMPT_WITH_EVIDENCE, PROMPT_GENERAL
 
@@ -51,7 +52,7 @@ def read_files(file_path, output):
     except ValueError as e:
         click.echo(colored(str(e), "red"))
     except Exception as e:
-        click.echo(colored(f"An unexpected error occurred: {e}", "red"))
+        click.echo(colored(f"[read_files] An unexpected error occurred: {e}", "red"))
 
 
 @cli.command()
@@ -74,7 +75,10 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
             md_file_path, chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
         file_name = os.path.basename(md_file_path)
-        file_hash = file_name[3:-3]
+        try:
+            file_hash = extract_hash(file_name)
+        except ValueError as e:
+            click.echo(colored(str(e), "red"))
         output_path = Path(output) / ("chunked_" + file_hash + ".jsonl")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
@@ -90,7 +94,9 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
     except ValueError as e:
         click.echo(colored(str(e), "red"))
     except Exception as e:
-        click.echo(colored(f"An unexpected error occurred: {e}", "red"))
+        click.echo(
+            colored(f"[chunk_markdown] An unexpected error occurred: {e}", "red")
+        )
 
 
 @cli.command()
@@ -111,14 +117,18 @@ def save_jsonl(jsonl_path_or_dir, table_name):
         )
         return table_name
     except Exception as e:
-        click.echo(colored(f"An unexpected error occurred: {e}", "red"))
+        click.echo(colored(f"[save_jsonl] An unexpected error occurred: {e}", "red"))
+        return None
 
 
 @cli.command()
 @click.option("--question")
+@click.option("--table-name", default="file_chunks")
 @click.option("--stream", is_flag=True, default=False, help="Enable streaming response")
 @click.option("--complicated-question", is_flag=True, default=False)
-def answer_question(question: str, stream: bool, complicated_question: bool):
+def answer_question(
+    question: str, table_name: str, stream: bool, complicated_question: bool
+):
     """
     Process question and return answer using the pipeline.
     """
@@ -128,7 +138,7 @@ def answer_question(question: str, stream: bool, complicated_question: bool):
         start_time = time.time()
         pipeline = Pipeline(root_path)
         question_related_docs = pipeline.find_question_related_docs(
-            question, complicated_question
+            question, table_name, complicated_question
         )
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -191,10 +201,10 @@ if __name__ == "__main__":
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md --table-name new_test
 
     uv run run.py answer-question --question "流式细胞制备如何操作?" --stream
-    uv run run.py answer-question --question "就三国演义小说介绍一下庞统的生平"
+    uv run run.py answer-question --question "就三国演义小说介绍一下庞统的生平" --stream --table-name sanguo --complicated-question
 
     uv run run.py read-files --file-path no_git_oic/test_files/三国演义.docx
     uv run run.py chunk-markdown --md-file-path output/md/md_c6f5b8c6fc281b49f3b50cc778c5cecc.md
-    uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6fc281b49f3b50cc778c5cecc.jsonl
+    uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6fc281b49f3b50cc778c5cecc.jsonl --table-name sanguo
     """
     cli()

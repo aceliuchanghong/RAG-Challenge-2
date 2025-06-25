@@ -107,7 +107,8 @@ class QuestionsProcessor:
                 + "\n1. 首先输出 high_level_sub_questions 即最核心的1~2个高层/宏观级子问题"
                 + "\n2. 然后再识别原问题输出3~7个 low_level_sub_questions, 这些是具体、独立、可检索的小问题。注意是[具体]、[独立]、[可检索]的小问题"
                 + "\n3. 输出格式必须为JSON 包含两个键:'high_level_sub_questions' 和 'low_level_sub_questions'，值均为字符串列表。"
-                + "\n4. 如果问题本身足够简单，则 high_level_sub_questions 和 low_level_sub_questions 均只包含原始问题。"
+                + "\n4. 生成问题的时候需要考虑它的不同名字的称呼和同义词，确保问题的多样性和覆盖面。"
+                + "\n5. 如果问题本身足够简单，则 high_level_sub_questions 和 low_level_sub_questions 均只包含原始问题。"
                 + "\n\n示例输入: 'vLLM和TensorRT-LLM有什么区别?'"
                 + """\n示例输出: 
         ```json
@@ -200,10 +201,14 @@ class QuestionsProcessor:
 
         if complicated_question:
             rewritten_query = self.rewrite_query(query)
+            # print(f"{rewritten_query}")
             high_level_sub_questions, low_level_sub_questions = self.decompose_question(
                 rewritten_query
             )
             sub_questions = high_level_sub_questions + low_level_sub_questions
+            # print(f"{sub_questions}")
+            self.rerank_sample_size = self.rerank_sample_size * 2
+            self.retrieve_sample_size = self.retrieve_sample_size * 2
         emb_doc_list = []
         for sub_question in sub_questions:
             result = self.retrieve_question(sub_question)
