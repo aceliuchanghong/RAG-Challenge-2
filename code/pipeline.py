@@ -98,14 +98,16 @@ class Pipeline:
         self.ingestor = LanceDBIngestor(self.db_path)
         self.ingestor.process_and_ingest_reports(report_or_reports_dir, table_name)
 
-    def answer_questions(self, question: str) -> List[str]:
+    def find_question_related_docs(
+        self, question: str, complicated_question: bool = True
+    ) -> List[str]:
         """
         Process a list of questions and return answers.
         """
         self.questions_processor = QuestionsProcessor(self.db_path, self.table_name)
         print(f"processing:{question}...")
         question_related_docs = self.questions_processor.find_question_related_docs(
-            question
+            question, complicated_question
         )
 
         return question_related_docs

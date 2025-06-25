@@ -190,15 +190,20 @@ class QuestionsProcessor:
         # print(f"混合检索后共找到 {len(unique_docs)} 份独立文档。")
         return unique_docs
 
-    def find_question_related_docs(self, query: str) -> Dict[str, Any]:
+    def find_question_related_docs(
+        self, query: str, complicated_question: bool = True
+    ) -> Dict[str, Any]:
         """
         处理单个问题的 RAG 流程
         """
-        rewritten_query = self.rewrite_query(query)
-        high_level_sub_questions, low_level_sub_questions = self.decompose_question(
-            rewritten_query
-        )
-        sub_questions = high_level_sub_questions + low_level_sub_questions
+        rewritten_query, sub_questions = query, [query]
+
+        if complicated_question:
+            rewritten_query = self.rewrite_query(query)
+            high_level_sub_questions, low_level_sub_questions = self.decompose_question(
+                rewritten_query
+            )
+            sub_questions = high_level_sub_questions + low_level_sub_questions
         emb_doc_list = []
         for sub_question in sub_questions:
             result = self.retrieve_question(sub_question)
@@ -225,7 +230,7 @@ class QuestionsProcessor:
                     "relevance_score": reranked_doc["relevance_score"],
                 }
                 results.append(result)
-
+        print(f"总共相关块数:{len(results)}")
         return results
 
 

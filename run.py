@@ -4,7 +4,12 @@ from termcolor import colored
 from pathlib import Path
 import json
 from code.pipeline import Pipeline
+import shutil
+from openai import OpenAI
+import time
+
 from z_utils.hash_x import compute_mdhash_id
+from code.prompt import PROMPT_WITH_EVIDENCE, PROMPT_GENERAL
 
 root_path = Path.cwd()
 
@@ -26,8 +31,8 @@ def read_files(file_path, output):
         pipeline = Pipeline(root_path)
         click.echo(colored(f"Reading file: {file_path}", "yellow"))
         content = pipeline.read_file(file_path)
-        output_name = compute_mdhash_id(content, prefix="md_")
-        output_path = Path(output) / (output_name + ".md")
+        mdhash_id = compute_mdhash_id(content)
+        output_path = Path(output) / ("md_" + mdhash_id + ".md")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -37,6 +42,11 @@ def read_files(file_path, output):
                 "green",
             )
         )
+        original_path = Path(output).parent / "original"
+        original_path.mkdir(exist_ok=True)
+        src_file = Path(file_path)
+        dest_file = original_path / f"{mdhash_id}{src_file.suffix}"
+        shutil.copy(src_file, dest_file)
         return output_path
     except ValueError as e:
         click.echo(colored(str(e), "red"))
@@ -106,23 +116,68 @@ def save_jsonl(jsonl_path_or_dir, table_name):
 
 @cli.command()
 @click.option("--question")
-def answer_question(question: str) -> list[str]:
+@click.option("--stream", is_flag=True, default=False, help="Enable streaming response")
+@click.option("--complicated-question", is_flag=True, default=False)
+def answer_question(question: str, stream: bool, complicated_question: bool):
     """
     Process question and return answer using the pipeline.
     """
+    llm = OpenAI(api_key=os.getenv("API_KEY"), base_url=os.getenv("BASE_URL"))
+
     try:
+        start_time = time.time()
         pipeline = Pipeline(root_path)
-        answer = pipeline.answer_questions(question)
-        if answer is None:
-            click.echo(colored("Pipeline 没有返回结果。", "red"))
+        question_related_docs = pipeline.find_question_related_docs(
+            question, complicated_question
+        )
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(colored(f"检索文档耗时: {elapsed_time:.2f}秒", "magenta"))
+        messages = []
+        if question_related_docs:
+            final_prompt = PROMPT_WITH_EVIDENCE.format(
+                question=question, context=question_related_docs
+            )
+
+            messages = [{"role": "user", "content": final_prompt}]
         else:
-            print("=" * 50)
-            click.echo(colored(f"Q: {question}", "blue"))
-            click.echo(colored(f"A: {answer}", "green"))
-            print("=" * 50)
-        return answer
+            click.echo(colored("未找到相关文档，将进行普通回答...", "red"))
+            messages = [
+                {"role": "user", "content": PROMPT_GENERAL.format(question=question)},
+            ]
+
+        # print(f"{messages}")
+        start_time = time.time()
+        click.echo("=" * 50)
+        click.echo(colored(f"Q: {question}", "blue"))
+        response = llm.chat.completions.create(
+            model="Qwen3",
+            messages=messages,
+            stream=stream,
+            temperature=0.7,
+        )
+
+        full_response = ""
+        click.echo(colored("A:", "green"), nl=False)
+        if stream:
+            chunk_buffer = ""
+            for chunk in response:
+                content = chunk.choices[0].delta.content
+                if content:
+                    chunk_buffer += content
+                    full_response += content
+                    print(colored(content, "green"), end="", flush=True)
+            print()
+        else:
+            full_response = response.choices[0].message.content
+            click.echo(colored(full_response, "green"))
+        click.echo("=" * 50)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(colored(f"生成结果耗时: {elapsed_time:.2f}秒", "magenta"))
+        return full_response
     except Exception as e:
-        click.echo(colored(f"发生意外错误: {e}", "red"))
+        click.echo(colored(f"\n发生意外错误: {e}", "red"))
         return None
 
 
@@ -135,7 +190,8 @@ if __name__ == "__main__":
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md --table-name new_test
 
-    uv run run.py answer-question --question "流式细胞制备如何操作?"
+    uv run run.py answer-question --question "流式细胞制备如何操作?" --stream
+    uv run run.py answer-question --question "就三国演义小说介绍一下庞统的生平"
 
     uv run run.py read-files --file-path no_git_oic/test_files/三国演义.docx
     uv run run.py chunk-markdown --md-file-path output/md/md_c6f5b8c6fc281b49f3b50cc778c5cecc.md
