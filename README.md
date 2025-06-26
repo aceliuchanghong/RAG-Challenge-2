@@ -1,48 +1,39 @@
-# RAG-Challenge-2
+## NEW-RAG
 
-## Usage
+### 环境安装
 
-You can run any part of pipeline by uncommenting the method you want to run in `src/pipeline.py` and executing:
-```bash
-python .\src\pipeline.py
+```shell
+uv run install.py
 ```
 
-You can also run any pipeline stage using `main.py`, but you need to run it from the directory containing your data:
+### 使用说明
+
+- 使用帮助
+
 ```bash
-cd .\data\test_set\
-python ..\..\main.py process-questions --config max_nst_o3m
+uv run run.py --help
 ```
 
-### CLI Commands
+- 常用命令
 
-Get help on available commands:
-```bash
-python main.py --help
+```shell
+uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
+uv run run.py read-files --file-path no_git_oic/test_files/
+
+uv run run.py chunk-markdown --md-file-path output/md/md_2a756c2048842968844b3d504cfd33b0.md
+uv run run.py chunk-markdown --md-file-path output/md/
+
+uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_2a756c2048842968844b3d504cfd33b0.jsonl
+uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md
+uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md --table-name new_test
+
+uv run run.py answer-question --question "流式细胞制备如何操作?" --stream
+uv run run.py answer-question --question "就三国演义小说介绍一下庞统的生平" --stream --table-name sanguo --complicated-question
+
+uv run run.py read-files --file-path no_git_oic/test_files/三国演义.docx
+uv run run.py chunk-markdown --md-file-path output/md/md_c6f5b8c6fc281b49f3b50cc778c5cecc.md
+uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6fc281b49f3b50cc778c5cecc.jsonl --table-name sanguo
 ```
-
-Available commands:
-- `download-models` - Download required docling models
-- `parse-pdfs` - Parse PDF reports with parallel processing options
-- `serialize-tables` - Process tables in parsed reports
-- `process-reports` - Run the full pipeline on parsed reports
-- `process-questions` - Process questions using specified config
-
-Each command has its own options. For example:
-```bash
-python main.py parse-pdfs --help
-# Shows options like --parallel/--sequential, --chunk-size, --max-workers
-
-python main.py process-reports --config ser_tab
-# Process reports with serialized tables config
-```
-
-## Some configs
-
-- `max_nst_o3m` - Best performing config using OpenAI's o3-mini model
-- `ibm_llama70b` - Alternative using IBM's Llama 70B model
-- `gemini_thinking` - Full context answering with using enormous context window of Gemini. It is not RAG, actually
-
-Check `pipeline.py` for more configs and detils on them.
 
 
 ### 通用思路
@@ -111,13 +102,6 @@ Check `pipeline.py` for more configs and detils on them.
 | 问题处理                          | 检索、重新排序和生成答案                      | `src/questions_processing/QuestionsProcessor.py` |
 
 
-教程：
-- [How To Build an AI Knowledge Base With RAG](https://dzone.com/articles/how-to-build-an-ai-knowledge-base-with-rag)：介绍如何构建 AI 知识库。
-- [Building a RAG Application from Scratch: A Beginner's Guide](https://www.pingcap.com/article/building-a-rag-application-from-scratch-a-beginners-guide/)：从零开始构建 RAG 应用的指南。
-- [Building a Knowledge Base for RAG: A Step-by-Step Guide](https://medium.com/%40arushiagg04/building-a-knowledge-base-for-rag-a-step-by-step-guide-c3afbccf3700)：详细步骤指南。
-
-
-
 ### rag通用难点
 |难点|具体体现|
 |-------|--------|
@@ -138,5 +122,4 @@ Check `pipeline.py` for more configs and detils on them.
 
 ### Reference
 - [教程](https://gemini.google.com/app/c319b9cc7507faa0)
-- [代码地址](https://github.com/aceliuchanghong/RAG-Challenge-2)
 - 

@@ -8,9 +8,10 @@ import shutil
 from openai import OpenAI
 import time
 
-from code.common import extract_hash
+from code.common import extract_hash, DocumentType
 from z_utils.hash_x import compute_mdhash_id
 from code.prompt import PROMPT_WITH_EVIDENCE, PROMPT_GENERAL
+
 
 root_path = Path.cwd()
 
@@ -20,66 +21,64 @@ def cli():
     pass
 
 
-@cli.command()
-@click.option("--file-path", help="Path to the file to be read.")
-@click.option("--output", default="output/md")
-def read_files(file_path, output):
-    """读取文件转为md"""
-    if not Path(file_path).is_file():
-        click.echo(colored(f"Error: File not found at {file_path}", "red"))
-        return
+def _process_file(file_path: Path, output_dir: str):
+    """
+    处理单个文件的核心逻辑 读取、计算哈希、保存md文件和原始文件。
+
+    Args:
+        file_path (Path): 要处理的文件的路径.
+        output_dir (str): md文件的输出目录.
+    """
     try:
         pipeline = Pipeline(root_path)
         click.echo(colored(f"Reading file: {file_path}", "yellow"))
         content = pipeline.read_file(file_path)
         mdhash_id = compute_mdhash_id(content)
-        output_path = Path(output) / ("md_" + mdhash_id + ".md")
+        output_path = Path(output_dir) / ("md_" + mdhash_id + ".md")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)
         click.echo(
             colored(
-                f"Successfully processed file and saved content to {output_path}",
+                f"Successfully processed and saved content to {output_path}",
                 "green",
             )
         )
-        original_path = Path(output).parent / "original"
+        original_path = Path(output_dir).parent / "original"
         original_path.mkdir(exist_ok=True)
-        src_file = Path(file_path)
-        dest_file = original_path / f"{mdhash_id}{src_file.suffix}"
-        shutil.copy(src_file, dest_file)
-        return output_path
+        dest_file = original_path / f"{mdhash_id}{file_path.suffix}"
+        shutil.copy(file_path, dest_file)
     except ValueError as e:
-        click.echo(colored(str(e), "red"))
+        click.echo(colored(f"Error processing {file_path.name}: {e}", "red"))
     except Exception as e:
-        click.echo(colored(f"[read_files] An unexpected error occurred: {e}", "red"))
+        click.echo(
+            colored(
+                f"[_process_file] An unexpected error occurred with {file_path.name}: {e}",
+                "red",
+            )
+        )
 
 
-@cli.command()
-@click.option("--md-file-path", help="MD file path")
-@click.option("--chunk-size", default=300, type=int)
-@click.option("--chunk-overlap", default=50, type=int)
-@click.option("--output", default="output/chunked_md")
-def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
-    """Chunk md file"""
-    if not Path(md_file_path).is_file():
-        click.echo(colored(f"Error: File not found at {md_file_path}", "red"))
-        return
-    if not md_file_path.endswith(".md"):
-        click.echo(colored("Error: The file must be a markdown (.md) file.", "red"))
-        return
+def _process_and_chunk_file(
+    md_file_path: Path, chunk_size: int, chunk_overlap: int, output_dir: str
+):
+    """
+    处理单个md文件的切片核心逻辑。
+
+    Args:
+        md_file_path (Path): 要处理的md文件的路径.
+        chunk_size (int): 切片大小.
+        chunk_overlap (int): 切片重叠大小.
+        output_dir (str): 切片结果(.jsonl)的输出目录.
+    """
     try:
         pipeline = Pipeline(root_path)
-        click.echo(colored(f"Chunking markdown file: {md_file_path}", "yellow"))
+        click.echo(colored(f"Chunking markdown file: {md_file_path.name}", "yellow"))
         chunks = pipeline.chunk_md_file(
-            md_file_path, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            str(md_file_path), chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
-        file_name = os.path.basename(md_file_path)
-        try:
-            file_hash = extract_hash(file_name)
-        except ValueError as e:
-            click.echo(colored(str(e), "red"))
-        output_path = Path(output) / ("chunked_" + file_hash + ".jsonl")
+        file_hash = extract_hash(md_file_path.name)
+        output_path = Path(output_dir) / ("chunked_" + file_hash + ".jsonl")
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             json_line = json.dumps(chunks, ensure_ascii=False)
@@ -90,12 +89,120 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
                 "green",
             )
         )
-        return output_path
-    except ValueError as e:
-        click.echo(colored(str(e), "red"))
     except Exception as e:
         click.echo(
-            colored(f"[chunk_markdown] An unexpected error occurred: {e}", "red")
+            colored(
+                f"[chunk_markdown] An unexpected error occurred with {md_file_path.name}: {e}",
+                "red",
+            )
+        )
+
+
+@cli.command()
+@click.option("--file-path", help="path or file to be read.")
+@click.option("--output", default="output/md")
+def read_files(file_path, output):
+    """读取文件或文件夹下面所有特定后缀文件转为md"""
+    path = Path(file_path)
+    allowed_suffixes = {
+        f".{ext}" for doc_type in DocumentType for ext in doc_type.value
+    }
+    if not path.exists():
+        click.echo(colored(f"Error: Path not found at '{file_path}'", "red"))
+        return
+    if path.is_file():
+        if path.suffix in allowed_suffixes:
+            _process_file(path, output)
+        else:
+            click.echo(
+                colored(
+                    f"Skipping file: Unsupported file type '{path.suffix}' for {path.name}",
+                    "magenta",
+                )
+            )
+    elif path.is_dir():
+        click.echo(colored(f"Reading allowed files from directory: {path}", "cyan"))
+        processed_count = 0
+        for item in path.iterdir():  # 不进入子目录
+            if item.is_file():
+                if item.suffix in allowed_suffixes:
+                    _process_file(item, output)
+                    processed_count += 1
+                else:
+                    click.echo(
+                        colored(
+                            f"Skipping file: Unsupported file type '{item.suffix}' for {item.name}",
+                            "magenta",
+                        )
+                    )
+        if processed_count == 0:
+            click.echo(colored(f"No processable files found in {path}", "yellow"))
+        else:
+            click.echo(
+                colored(
+                    f"Finished processing directory. Total files processed: {processed_count}",
+                    "green",
+                )
+            )
+    else:
+        click.echo(
+            colored(
+                f"Error: Path '{file_path}' is not a valid file or directory.", "red"
+            )
+        )
+
+
+@cli.command()
+@click.option("--md-file-path", help="MD file path")
+@click.option("--chunk-size", default=300, type=int)
+@click.option("--chunk-overlap", default=50, type=int)
+@click.option("--output", default="output/chunked_md", help="Output directory")
+def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
+    """
+    将一个 'md_{hash}.md' 文件或一个目录中所有符合该格式的文件进行切片。
+    """
+    path = Path(md_file_path)
+    if not path.exists():
+        click.echo(colored(f"Error: Path not found at '{md_file_path}'", "red"))
+        return
+    if path.is_file():
+        try:
+            # 验证文件名格式是否正确
+            extract_hash(path.name)
+            _process_and_chunk_file(path, chunk_size, chunk_overlap, output)
+        except ValueError as e:
+            # 文件名格式不正确，进行提示并跳过
+            click.echo(colored(f"Skipping file: {path.name}. Reason: {e}", "magenta"))
+    elif path.is_dir():
+        click.echo(colored(f"Chunking valid files from directory: {path}", "cyan"))
+        processed_count = 0
+        for item in path.iterdir():
+            if item.is_file():
+                try:
+                    # 验证文件名格式是否正确，不正确则跳过
+                    extract_hash(item.name)
+                    _process_and_chunk_file(item, chunk_size, chunk_overlap, output)
+                    processed_count += 1
+                except ValueError:
+                    pass  # 静默跳过
+        if processed_count == 0:
+            click.echo(
+                colored(
+                    f"No files with format 'md_{{hash}}.md' found in {path}", "yellow"
+                )
+            )
+        else:
+            click.echo(
+                colored(
+                    f"Finished processing directory. Total files chunked: {processed_count}",
+                    "green",
+                )
+            )
+    else:
+        click.echo(
+            colored(
+                f"Error: Path '{md_file_path}' is not a valid file or directory.", "red"
+            )
         )
 
 
@@ -194,7 +301,10 @@ def answer_question(
 if __name__ == "__main__":
     """
     uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
+    uv run run.py read-files --file-path no_git_oic/test_files/
+
     uv run run.py chunk-markdown --md-file-path output/md/md_2a756c2048842968844b3d504cfd33b0.md
+    uv run run.py chunk-markdown --md-file-path output/md/
 
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_2a756c2048842968844b3d504cfd33b0.jsonl
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md
