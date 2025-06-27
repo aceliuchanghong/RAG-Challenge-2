@@ -3,13 +3,14 @@ import os
 from termcolor import colored
 from pathlib import Path
 import json
-from code.pipeline import Pipeline
 import shutil
 from openai import OpenAI
 import time
+from typing import Optional
 
-from code.common import extract_hash, DocumentType
 from z_utils.hash_x import compute_mdhash_id
+from code.pipeline import Pipeline
+from code.common import extract_hash, DocumentType
 from code.prompt import PROMPT_WITH_EVIDENCE, PROMPT_GENERAL
 
 
@@ -60,7 +61,11 @@ def _process_file(file_path: Path, output_dir: str):
 
 
 def _process_and_chunk_file(
-    md_file_path: Path, chunk_size: int, chunk_overlap: int, output_dir: str
+    md_file_path: Path,
+    chunk_size: int,
+    chunk_overlap: int,
+    output_dir: str,
+    tags: tuple[str],
 ):
     """
     处理单个md文件的切片核心逻辑。
@@ -75,7 +80,10 @@ def _process_and_chunk_file(
         pipeline = Pipeline(root_path)
         click.echo(colored(f"Chunking markdown file: {md_file_path.name}", "yellow"))
         chunks = pipeline.chunk_md_file(
-            str(md_file_path), chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            str(md_file_path),
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            tags=tags,
         )
         file_hash = extract_hash(md_file_path.name)
         output_path = Path(output_dir) / ("chunked_" + file_hash + ".jsonl")
@@ -157,7 +165,8 @@ def read_files(file_path, output):
 @click.option("--chunk-size", default=300, type=int)
 @click.option("--chunk-overlap", default=50, type=int)
 @click.option("--output", default="output/chunked_md", help="Output directory")
-def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
+@click.option("--tags", multiple=True, help="Add tags")
+def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags):
     """
     将一个 'md_{hash}.md' 文件或一个目录中所有符合该格式的文件进行切片。
     """
@@ -169,7 +178,7 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
         try:
             # 验证文件名格式是否正确
             extract_hash(path.name)
-            _process_and_chunk_file(path, chunk_size, chunk_overlap, output)
+            _process_and_chunk_file(path, chunk_size, chunk_overlap, output, tags)
         except ValueError as e:
             # 文件名格式不正确，进行提示并跳过
             click.echo(colored(f"Skipping file: {path.name}. Reason: {e}", "magenta"))
@@ -181,7 +190,9 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output):
                 try:
                     # 验证文件名格式是否正确，不正确则跳过
                     extract_hash(item.name)
-                    _process_and_chunk_file(item, chunk_size, chunk_overlap, output)
+                    _process_and_chunk_file(
+                        item, chunk_size, chunk_overlap, output, tags
+                    )
                     processed_count += 1
                 except ValueError:
                     pass  # 静默跳过
@@ -231,10 +242,45 @@ def save_jsonl(jsonl_path_or_dir, table_name):
 @cli.command()
 @click.option("--question")
 @click.option("--table-name", default="file_chunks")
+@click.option("--complicated-question", is_flag=True, default=False)
+@click.option("--tags", multiple=True, help="Find tags")
+def get_docs(
+    question: str, table_name: str, complicated_question: bool, tags: tuple[str]
+):
+    """
+    Process question and return related docs using the pipeline.
+    """
+    try:
+        start_time = time.time()
+        pipeline = Pipeline(root_path)
+        question_related_docs = pipeline.find_question_related_docs(
+            question, table_name, complicated_question, tags
+        )
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(colored(f"检索文档耗时: {elapsed_time:.2f}秒", "magenta"))
+        if question_related_docs:
+            return question_related_docs
+        else:
+            click.echo(colored("未找到相关文档", "red"))
+            return None
+    except Exception as e:
+        click.echo(colored(f"\n[get_docs] 发生意外错误: {e}", "red"))
+        return None
+
+
+@cli.command()
+@click.option("--question")
+@click.option("--table-name", default="file_chunks")
 @click.option("--stream", is_flag=True, default=False, help="Enable streaming response")
 @click.option("--complicated-question", is_flag=True, default=False)
+@click.option("--tags", multiple=True, help="Find tags")
 def answer_question(
-    question: str, table_name: str, stream: bool, complicated_question: bool
+    question: str,
+    table_name: str,
+    stream: bool,
+    complicated_question: bool,
+    tags: tuple[str],
 ):
     """
     Process question and return answer using the pipeline.
@@ -245,7 +291,7 @@ def answer_question(
         start_time = time.time()
         pipeline = Pipeline(root_path)
         question_related_docs = pipeline.find_question_related_docs(
-            question, table_name, complicated_question
+            question, table_name, complicated_question, tags
         )
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -303,12 +349,14 @@ if __name__ == "__main__":
     uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
     uv run run.py read-files --file-path no_git_oic/test_files/
 
-    uv run run.py chunk-markdown --md-file-path output/md/md_2a756c2048842968844b3d504cfd33b0.md
+    uv run run.py chunk-markdown --md-file-path output/md/md_2a756c2048842968844b3d504cfd33b0.md --tags test1 --tags test2
     uv run run.py chunk-markdown --md-file-path output/md/
 
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_2a756c2048842968844b3d504cfd33b0.jsonl
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md
     uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md --table-name new_test
+
+    uv run run.py get-docs --question "流式细胞制备如何操作?" --complicated-question --tags test1
 
     uv run run.py answer-question --question "流式细胞制备如何操作?" --stream
     uv run run.py answer-question --question "就三国演义小说介绍一下庞统的生平" --stream --table-name sanguo --complicated-question

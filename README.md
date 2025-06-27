@@ -36,7 +36,7 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 ```
 
 
-### 通用思路
+### 思路
 ```
 [用户问题]
      ↓
@@ -59,19 +59,18 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 
 
 
-1. **下载模型**  
-   - 运行 `python main.py download_models`，下载 PDF 解析（如 Docling）所需的模型，确保后续步骤顺利进行。
 
-2. **解析 PDF 报告**  
+
+1. **解析 PDF 报告**  
    - 运行 `python main.py parse_pdfs --parallel --chunk-size 2 --max-workers 10`，以并行方式解析 PDF 报告。  
    - 此步骤使用 `src/pdf_parsing/PDFParser.py` 中的 `PDFParser` 类，基于 Docling 提取文本和结构，输出存储在 `01_parsed_reports` 目录。  
    - 根据文章描述，解析 100 个 PDF（每份最多 1000 页）耗时 40 分钟，使用 GPU（如 4090）可加速。
 
-3. **序列化表格（可选）**  
+2. **序列化表格（可选）**  
    - 运行 `python main.py serialize_tables --max-workers 10`，处理解析后的报告中的表格。  
    - 此步骤使用 `src/tables_serialization/TableSerializer.py`，但文章提到最终解决方案未使用序列化表格，因其略微降低效果，可根据需要选择是否执行。
 
-4. **处理报告**  
+3. **处理报告**  
    - 运行 `python main.py process_reports --config no_ser_tab`，处理解析后的报告。  
    - 此步骤包括多个子阶段：  
      - **合并报告**：使用 `merge_reports` 方法，调用 `src/parsed_reports_merging/PageTextPreparation.py` 合并多页数据。  
@@ -80,7 +79,7 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
      - **创建向量数据库**：使用 `create_vector_dbs`，调用 `src/ingestion/VectorDBIngestor.py`，使用 FAISS 和 text-embedding-3-large 嵌入创建向量数据库。  
    - 配置 `no_ser_tab` 表示不使用序列化表格，适合最佳性能。
 
-5. **处理问题**  
+4. **处理问题**  
    - 运行 `python main.py process_questions --config max_nst_o3m`，处理问题以生成答案。  
    - 此步骤使用 `src/questions_processing/QuestionsProcessor.py`，包括：  
      - 检索：从向量数据库中获取前 30 个块。  
@@ -102,7 +101,7 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 | 问题处理                          | 检索、重新排序和生成答案                      | `src/questions_processing/QuestionsProcessor.py` |
 
 
-### rag通用难点
+### 难点
 |难点|具体体现|
 |-------|--------|
 |海量异构 PDF 解析-文档多样性与解析难度|包含 PDF、Word、网页等多种格式；存在双栏、旋转表格、图表混排等结构，导致通用解析器效果不佳|

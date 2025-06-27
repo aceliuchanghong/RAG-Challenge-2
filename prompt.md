@@ -396,13 +396,23 @@ uv run run.py answer-question --table-name mp_database --question "CaCO3的A位�
 uv run run.py read-files --file-path no_git_oic/torch_test_files --output no_git_oic/torch_output/md
 uv run run.py chunk-markdown --md-file-path no_git_oic/torch_output/md --output no_git_oic/torch_output/chunked_md
 uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/torch_output/chunked_md --table-name torch_database
-uv run run.py answer-question --table-name torch_database --question "上班如果迟到5分钟怎么处理" --stream --complicated-question
+uv run run.py answer-question --table-name torch_database --question "上班如果迟到怎么处理" --stream --complicated-question
 ```
 
 
 ---
 
+我在做rag,设计向量数据库的表,我在考虑要不要加2个备用字段和一个tags字段,这个tags字段怎么设计呢?
+```python
+class LanceDBSchema(LanceModel):
+    """定义数据模型 (Schema)"""
 
+    text: Optional[str]  # 原始文本块内容
+    text_for_fts: Optional[str]  # 分词后的文本，用于FTS索引
+    vector: Vector(2560)  # 文本对应的向量
+    report_sha1: Optional[str]  # 该文本块所属报告的SHA1标识符
+    chunk_id: Optional[int]  # 文本块在原报告中的索引位置
+```
 
 ---
 

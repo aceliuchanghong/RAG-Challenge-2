@@ -69,15 +69,18 @@ class Pipeline:
         return content
 
     def chunk_md_file(
-        self, md_file_path: str, chunk_size: int = 300, chunk_overlap: int = 50
+        self,
+        md_file_path: str,
+        chunk_size: int = 300,
+        chunk_overlap: int = 50,
+        tags: tuple[str] = None,
     ) -> dict:
         """
         Chunk a markdown file into smaller parts based on the specified chunk size and overlap.
         """
 
         splitter = CustomRecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
+            chunk_size=chunk_size, chunk_overlap=chunk_overlap, tags=tags
         )
         return splitter.split_text(md_file_path)
 
@@ -99,7 +102,11 @@ class Pipeline:
         self.ingestor.process_and_ingest_reports(report_or_reports_dir, table_name)
 
     def find_question_related_docs(
-        self, question: str, table_name, complicated_question: bool = True
+        self,
+        question: str,
+        table_name,
+        complicated_question: bool = True,
+        tags: tuple[str] = (),
     ) -> List[str]:
         """
         Process a list of questions and return answers.
@@ -108,7 +115,7 @@ class Pipeline:
         self.questions_processor = QuestionsProcessor(self.db_path, self.table_name)
         print(f"processing:{question}...")
         question_related_docs = self.questions_processor.find_question_related_docs(
-            question, complicated_question
+            question, complicated_question, tags
         )
 
         return question_related_docs

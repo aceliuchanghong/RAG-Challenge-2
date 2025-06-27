@@ -9,6 +9,7 @@ class CustomRecursiveCharacterTextSplitter:
         chunk_overlap: int = 50,
         model_name: str = "gpt-4o",
         separators: Optional[List[str]] = None,
+        tags: tuple[str] = None,
     ):
         """
         初始化自定义文本分割器。
@@ -28,6 +29,7 @@ class CustomRecursiveCharacterTextSplitter:
         self.model_name = model_name
         self._separators = separators or ["\n\n", "\n", ". ", "? ", "! ", " ", ""]
         self._tokenizer = tiktoken.encoding_for_model(model_name)
+        self.tags = tags if tags else ()
 
     def _get_token_count(self, text: str) -> int:
         """计算字符串的 token 数量。"""
@@ -45,6 +47,7 @@ class CustomRecursiveCharacterTextSplitter:
             字典，格式为:
             {
                 "file_hash": 文件哈希值,
+                "tags": ["tag1", "tag2", ...],
                 "chunks": [
                     {"token_count": token数量, "page_num": 页面编号, "content": 分片内容},
                     ...
@@ -54,7 +57,7 @@ class CustomRecursiveCharacterTextSplitter:
         with open(file_path, "r", encoding="utf-8") as f:
             text = f.read()
         if not text:
-            return {"file_hash": "", "chunks": []}
+            return {"file_hash": "", "tags": [], "chunks": []}
 
         # 1. 递归分割文本为小片段
         initial_parts = self._split(text, self._separators)
@@ -82,12 +85,12 @@ class CustomRecursiveCharacterTextSplitter:
                 file_hash = file_name[3:-3]  # 提取 md_ 和 .md 之间的部分
             else:
                 raise ValueError(
-                    f"文件名格式不正确，预期为 md_{{hash}}.md，实际为 {file_name}"
+                    f"文件名格式不正确，预期为 md_{{hash}}.md 实际为 {file_name}"
                 )
         else:
             raise ValueError(f"文件不存在 {file_name}")
 
-        return {"file_hash": file_hash, "chunks": result}
+        return {"file_hash": file_hash, "tags": list(self.tags), "chunks": result}
 
     def _split(self, text: str, separators: List[str]) -> List[str]:
         """

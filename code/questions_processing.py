@@ -25,8 +25,8 @@ from z_utils.get_json import parse_and_check_json_markdown
 class QuestionsProcessor:
     lancedb_dir: Union[str, Path] = "./lancedb"
     table_name: str = "file_chunks"
-    rerank_sample_size: int = 10
-    retrieve_sample_size: int = 20
+    rerank_sample_size: int = 8
+    retrieve_sample_size: int = 15
     answering_model: str = "Qwen3"
     retrieve_model: str = "Qwen3-Embedding-4B"
     rerank_model: str = "mxbai_rerank_large_v2"
@@ -163,13 +163,15 @@ class QuestionsProcessor:
                 all_docs[key] = doc
         return list(all_docs.values())
 
-    def retrieve_question(self, query: str) -> List[LanceModel]:
+    def retrieve_question(self, query: str, tags: tuple[str]) -> List[LanceModel]:
         """
         为一个查询执行混合检索（向量+关键词）
         """
+        tags = list(tags)
+        # print(f"{tags}")
         try:
             vector_results = self.db.vector_search(
-                query, limit=self.retrieve_sample_size, do_print=False
+                query, limit=self.retrieve_sample_size, tags_filter=tags, do_print=False
             )
         except Exception as e:
             print(f"向量检索时出错: {e}")
@@ -177,7 +179,7 @@ class QuestionsProcessor:
 
         try:
             keyword_results = self.db.keyword_search(
-                query, limit=self.retrieve_sample_size, do_print=False
+                query, limit=self.retrieve_sample_size, tags_filter=tags, do_print=False
             )
         except Exception as e:
             print(f"关键词检索时出错: {e}")
@@ -192,7 +194,10 @@ class QuestionsProcessor:
         return unique_docs
 
     def find_question_related_docs(
-        self, query: str, complicated_question: bool = True
+        self,
+        query: str,
+        complicated_question: bool = True,
+        tags: tuple[str] = (),
     ) -> Dict[str, Any]:
         """
         处理单个问题的 RAG 流程
@@ -201,27 +206,30 @@ class QuestionsProcessor:
 
         if complicated_question:
             rewritten_query = self.rewrite_query(query)
-            # print(f"{rewritten_query}")
+            print(f"重写的问题:{rewritten_query}")
             high_level_sub_questions, low_level_sub_questions = self.decompose_question(
                 rewritten_query
             )
             sub_questions = high_level_sub_questions + low_level_sub_questions
-            # print(f"{sub_questions}")
+            print(f"分解的 high_level_sub_questions 问题:{high_level_sub_questions}")
+            print(f"分解的 low_level_sub_questions 问题:{low_level_sub_questions}")
             self.rerank_sample_size = self.rerank_sample_size * 2
             self.retrieve_sample_size = self.retrieve_sample_size * 2
         emb_doc_list = []
         for sub_question in sub_questions:
-            result = self.retrieve_question(sub_question)
+            result = self.retrieve_question(sub_question, tags)
             emb_doc_list = emb_doc_list + result
         emb_doc_list_unique = self._merge_unique_docs(emb_doc_list)
         print(f"总共emb块数:{len(emb_doc_list_unique)}")
+        docs, results = [], []
 
-        docs = []
+        if len(emb_doc_list_unique) == 0:
+            return results
+
         for i, emb_doc in enumerate(emb_doc_list_unique):
             docs.append(emb_doc.text)
         reranked_docs = self.rerank_documents(query=rewritten_query, documents=docs)
         print(f"总共rerank块数:{len(reranked_docs)}")
-        results = []
         for _, reranked_doc in enumerate(reranked_docs):
             i = reranked_doc["index"]
             if (
