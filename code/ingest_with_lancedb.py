@@ -106,7 +106,10 @@ class LanceDBIngestor:
             raise
 
     def process_and_ingest_reports(
-        self, report_or_reports_dir: Union[str, Path], table_name="file_chunks"
+        self,
+        report_or_reports_dir: Union[str, Path],
+        table_name="file_chunks",
+        batch_size: int = 200,
     ):
         """
         处理所有报告，并将数据分批次存入 LanceDB。
@@ -174,15 +177,21 @@ class LanceDBIngestor:
                 # ===============================================================
 
         if all_data_to_add:
-            print(
-                f"[2/3] 正在向 LanceDB 表中合并 {len(all_data_to_add)} 个数据块 (Upsert)..."
-            )
-            # 使用 merge_insert 可以保证数据的唯一性（基于report_sha1和chunk_id）
-            self.table.merge_insert(
-                on=["report_sha1", "chunk_id"]
-            ).when_matched_update_all().when_not_matched_insert_all().execute(
-                all_data_to_add
-            )
+            total_chunks = len(all_data_to_add)
+            print(f"[2/3] 准备向 LanceDB 表中合并 {total_chunks} 个数据块 (Upsert)...")
+
+            # 使用 tqdm 创建一个进度条来进行分批写入
+            for i in tqdm(
+                range(0, total_chunks, batch_size), desc="[2/3] 正在分批写入数据"
+            ):
+                batch_data = all_data_to_add[i : i + batch_size]
+
+                self.table.merge_insert(
+                    on=["report_sha1", "chunk_id"]
+                ).when_matched_update_all().when_not_matched_insert_all().execute(
+                    batch_data
+                )
+            print("所有批次数据合并完成。")
 
         print("[3/3] 正在创建全文搜索 (FTS) 索引...")
         self.table.create_fts_index("text_for_fts", replace=True)

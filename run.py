@@ -107,8 +107,8 @@ def _process_and_chunk_file(
 
 
 @cli.command()
-@click.option("--file-path", help="path or file to be read.")
-@click.option("--output", default="output/md")
+@click.option("--file-path", help="待读取的文件或文件夹")
+@click.option("--output", default="output/md", help="输出目录")
 def read_files(file_path, output):
     """读取文件或文件夹下面所有特定后缀文件转为md"""
     path = Path(file_path)
@@ -161,11 +161,11 @@ def read_files(file_path, output):
 
 
 @cli.command()
-@click.option("--md-file-path", help="MD file path")
-@click.option("--chunk-size", default=300, type=int)
-@click.option("--chunk-overlap", default=50, type=int)
-@click.option("--output", default="output/chunked_md", help="Output directory")
-@click.option("--tags", multiple=True, help="Add tags")
+@click.option("--md-file-path", help="MD文件或者文件夹")
+@click.option("--chunk-size", default=300, type=int, help="切块大小")
+@click.option("--chunk-overlap", default=50, type=int, help="切块重合大小")
+@click.option("--output", default="output/chunked_md", help="输出目录")
+@click.option("--tags", multiple=True, help="添加 tags")
 def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags):
     """
     将一个 'md_{hash}.md' 文件或一个目录中所有符合该格式的文件进行切片。
@@ -218,10 +218,10 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags):
 
 
 @cli.command()
-@click.option("--jsonl-path-or-dir", default="output/chunked_md", help="path or dir")
-@click.option("--table-name", default="file_chunks")
+@click.option("--jsonl-path-or-dir", default="output/chunked_md", help="文件或文件夹")
+@click.option("--table-name", default="保存表名")
 def save_jsonl(jsonl_path_or_dir, table_name):
-    """save jsonl files to LanceDB"""
+    """数据库存储"""
     try:
         pipeline = Pipeline(root_path)
         pipeline.save2lacncedb(
@@ -240,15 +240,15 @@ def save_jsonl(jsonl_path_or_dir, table_name):
 
 
 @cli.command()
-@click.option("--question")
-@click.option("--table-name", default="file_chunks")
-@click.option("--complicated-question", is_flag=True, default=False)
-@click.option("--tags", multiple=True, help="Find tags")
+@click.option("--question", help="输入问题")
+@click.option("--table-name", default="file_chunks", help="表名")
+@click.option("--complicated-question", is_flag=True, default=False, help="复杂问题")
+@click.option("--tags", multiple=True, help="寻找 tags")
 def get_docs(
     question: str, table_name: str, complicated_question: bool, tags: tuple[str]
 ):
     """
-    Process question and return related docs using the pipeline.
+    快速检索问题
     """
     try:
         start_time = time.time()
@@ -270,11 +270,11 @@ def get_docs(
 
 
 @cli.command()
-@click.option("--question")
-@click.option("--table-name", default="file_chunks")
-@click.option("--stream", is_flag=True, default=False, help="Enable streaming response")
-@click.option("--complicated-question", is_flag=True, default=False)
-@click.option("--tags", multiple=True, help="Find tags")
+@click.option("--question", help="输入问题")
+@click.option("--table-name", default="file_chunks", help="表名")
+@click.option("--stream", is_flag=True, default=False, help="开启流式输出")
+@click.option("--complicated-question", is_flag=True, default=False, help="复杂问题")
+@click.option("--tags", multiple=True, help="寻找 tags")
 def answer_question(
     question: str,
     table_name: str,
@@ -283,7 +283,7 @@ def answer_question(
     tags: tuple[str],
 ):
     """
-    Process question and return answer using the pipeline.
+    快速回答问题
     """
     llm = OpenAI(api_key=os.getenv("API_KEY"), base_url=os.getenv("BASE_URL"))
 

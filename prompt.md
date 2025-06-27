@@ -387,6 +387,7 @@ table.checkout(1)
 uv run run.py read-files --file-path no_git_oic/material_prediction_files --output no_git_oic/mp_output/md
 uv run run.py chunk-markdown --md-file-path no_git_oic/mp_output/md --output no_git_oic/mp_output/chunked_md
 uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/mp_output/chunked_md --table-name mp_database
+uv run run.py get-docs --question "CaCO3的A位、B位掺杂,有哪些比较合适?" --table-name mp_database --complicated-question --tags test1
 uv run run.py answer-question --table-name mp_database --question "CaCO3的A位、B位掺杂,有哪些比较合适?" --stream --complicated-question
 ```
 
