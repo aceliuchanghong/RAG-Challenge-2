@@ -107,6 +107,38 @@ def _process_and_chunk_file(
 
 
 @cli.command()
+@click.option("--models", default="ShelterW/OCRFlux-3B", help="模型")
+@click.option("--source", default="ms", type=click.Choice(["ms", "hf"]), help="下载源")
+def download_models(models, source):
+    """Download required models from specified source."""
+    click.echo(f"Downloading {models} models from {source}...")
+
+    # 设置输出路径
+    output_path = "/mnt/data/llch/Models/" + models.split("/")[1]
+    os.makedirs(output_path, exist_ok=True)
+
+    if source == "hf":
+        # ChatDOC/OCRFlux-3B
+        from huggingface_hub import snapshot_download as hf_snapshot_download
+
+        os.environ["HF_ENDPOINT"] = "https://huggingface.co"
+        snapshot_download = hf_snapshot_download
+    else:
+        from modelscope import snapshot_download as ms_snapshot_download
+
+        snapshot_download = ms_snapshot_download
+
+    # 执行下载
+    model_dir = snapshot_download(
+        repo_id=models,
+        local_dir=output_path,
+        # resume_download=True,
+    )
+
+    click.echo(f"Downloaded {models} models successfully to {model_dir}")
+
+
+@cli.command()
 @click.option("--file-path", help="待读取的文件或文件夹")
 @click.option("--output", default="output/md", help="输出目录")
 def read_files(file_path, output):
@@ -256,11 +288,14 @@ def get_docs(
         question_related_docs = pipeline.find_question_related_docs(
             question, table_name, complicated_question, tags
         )
+        for item in question_related_docs["results"]:
+            if "relevance_score" in item:
+                del item["relevance_score"]
         end_time = time.time()
         elapsed_time = end_time - start_time
         print(colored(f"检索文档耗时: {elapsed_time:.2f}秒", "magenta"))
         if question_related_docs:
-            return question_related_docs
+            return question_related_docs["results"]
         else:
             click.echo(colored("未找到相关文档", "red"))
             return None
@@ -293,10 +328,16 @@ def answer_question(
         question_related_docs = pipeline.find_question_related_docs(
             question, table_name, complicated_question, tags
         )
+        # print(f"bb{question_related_docs}")
+        for item in question_related_docs["results"]:
+            if "relevance_score" in item:
+                del item["relevance_score"]
         end_time = time.time()
         elapsed_time = end_time - start_time
         print(colored(f"检索文档耗时: {elapsed_time:.2f}秒", "magenta"))
         messages = []
+        question_related_docs = question_related_docs["results"]
+        # print(f"{question_related_docs}")
         if question_related_docs:
             final_prompt = PROMPT_WITH_EVIDENCE.format(
                 question=question, context=question_related_docs
@@ -346,6 +387,8 @@ def answer_question(
 
 if __name__ == "__main__":
     """
+    uv run run.py download-models
+
     uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
     uv run run.py read-files --file-path no_git_oic/test_files/
 

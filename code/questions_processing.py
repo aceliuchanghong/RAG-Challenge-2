@@ -25,8 +25,8 @@ from z_utils.get_json import parse_and_check_json_markdown
 class QuestionsProcessor:
     lancedb_dir: Union[str, Path] = "./lancedb"
     table_name: str = "file_chunks"
-    rerank_sample_size: int = 8
-    retrieve_sample_size: int = 15
+    rerank_sample_size: int = 6
+    retrieve_sample_size: int = 10
     answering_model: str = "Qwen3"
     retrieve_model: str = "Qwen3-Embedding-4B"
     rerank_model: str = "mxbai_rerank_large_v2"
@@ -163,15 +163,22 @@ class QuestionsProcessor:
                 all_docs[key] = doc
         return list(all_docs.values())
 
-    def retrieve_question(self, query: str, tags: tuple[str]) -> List[LanceModel]:
+    def retrieve_question(
+        self, query: str, tags: tuple[str], retrieve_size: Union[int | None] = None
+    ) -> List[LanceModel]:
         """
         为一个查询执行混合检索（向量+关键词）
         """
         tags = list(tags)
         # print(f"{tags}")
+        if retrieve_size is not None:
+            retrieve_sample_size = retrieve_size
+        else:
+            retrieve_sample_size = self.retrieve_sample_size
+
         try:
             vector_results = self.db.vector_search(
-                query, limit=self.retrieve_sample_size, tags_filter=tags, do_print=False
+                query, limit=retrieve_sample_size, tags_filter=tags, do_print=False
             )
         except Exception as e:
             print(f"向量检索时出错: {e}")
@@ -179,16 +186,18 @@ class QuestionsProcessor:
 
         try:
             keyword_results = self.db.keyword_search(
-                query, limit=self.retrieve_sample_size, tags_filter=tags, do_print=False
+                query, limit=retrieve_sample_size, tags_filter=tags, do_print=False
             )
         except Exception as e:
             print(f"关键词检索时出错: {e}")
             keyword_results = []
         """
         [LanceDBSchema(text='却说庞统迤逦前进及', vector=FixedSizeList(dim=2560), report_sha1='c6f5b8c6fc281b49f3b50cc778c5cecc', chunk_id=3305),
-         LanceDBSchema(text='庞统字士元巴西人也', vector=FixedSizeList(dim=2560), report_sha1='c6f5b8c6fc281b49f3b50cc778c5cecc', chunk_id=3306),
+         LanceDBSchema(text='庞统字士元巴西人也', vector=FixedSizeList(dim=2560), report_sha1='c6cvbusigfs81b49f3b50cc778c5cecc', chunk_id=3306),
          ...]
         """
+        if retrieve_sample_size <= 1:
+            keyword_results = []
         unique_docs = self._merge_unique_docs(vector_results, keyword_results)
         # print(f"混合检索后共找到 {len(unique_docs)} 份独立文档。")
         return unique_docs
@@ -200,9 +209,10 @@ class QuestionsProcessor:
         tags: tuple[str] = (),
     ) -> Dict[str, Any]:
         """
-        处理单个问题的 RAG 流程
+        处理单个问题的 RAG 流程，确保 top_results 无条件保留且最终结果无重复。
         """
         rewritten_query, sub_questions = query, [query]
+        top_results = []
 
         if complicated_question:
             rewritten_query = self.rewrite_query(query)
@@ -215,36 +225,78 @@ class QuestionsProcessor:
             print(f"分解的 low_level_sub_questions 问题:{low_level_sub_questions}")
             self.rerank_sample_size = self.rerank_sample_size * 2
             self.retrieve_sample_size = self.retrieve_sample_size * 2
+            for sub_question in sub_questions:
+                top_result = self.retrieve_question(sub_question, tags, 1)
+                top_results.extend(top_result)
+
+        # 1. 汇集所有检索源的文档
         emb_doc_list = []
         for sub_question in sub_questions:
             result = self.retrieve_question(sub_question, tags)
-            emb_doc_list = emb_doc_list + result
-        emb_doc_list_unique = self._merge_unique_docs(emb_doc_list)
-        print(f"总共emb块数:{len(emb_doc_list_unique)}")
-        docs, results = [], []
+            emb_doc_list.extend(result)
 
-        if len(emb_doc_list_unique) == 0:
-            return results
+        # 2. 在源头进行统一去重，生成唯一的候选文档池
+        emb_doc_list_unique = self._merge_unique_docs(emb_doc_list + top_results)
+        print(f"总共emb块数(去重后):{len(emb_doc_list_unique)}")
+        results = []
 
-        for i, emb_doc in enumerate(emb_doc_list_unique):
-            docs.append(emb_doc.text)
-        reranked_docs = self.rerank_documents(query=rewritten_query, documents=docs)
-        print(f"总共rerank块数:{len(reranked_docs)}")
-        for _, reranked_doc in enumerate(reranked_docs):
-            i = reranked_doc["index"]
-            if (
-                reranked_doc["document"]["text"] == emb_doc_list_unique[i].text
-                and reranked_doc["relevance_score"] > 6.5
-            ):
+        if not emb_doc_list_unique:
+            return {"results": []}
+
+        # 3. 识别出“必选”文档的ID
+        top_results_ids = set((doc.report_sha1, doc.chunk_id) for doc in top_results)
+
+        docs_to_rerank_text = []
+        docs_to_rerank_obj = []
+
+        # 4. 分离文档池：一个文档要么进入必选组，要么进入待重排组，二者互斥
+        for doc in emb_doc_list_unique:
+            doc_id = (doc.report_sha1, doc.chunk_id)
+            if doc_id in top_results_ids:
+                # 路径A: 必选文档，直接加入最终结果
                 result = {
-                    "text": reranked_doc["document"]["text"],
-                    "report_sha1": emb_doc_list_unique[i].report_sha1,
-                    "chunk_id": emb_doc_list_unique[i].chunk_id,
-                    "relevance_score": reranked_doc["relevance_score"],
+                    "text": doc.text,
+                    "report_sha1": doc.report_sha1,
+                    "chunk_id": doc.chunk_id,
+                    "relevance_score": 10.0,  # 使用10分作为必选标记
                 }
                 results.append(result)
+                top_results_ids.remove(doc_id)  # 从集合中移除，更健壮
+            else:
+                # 路径B: 待重排文档，加入重排列表
+                docs_to_rerank_text.append(doc.text)
+                docs_to_rerank_obj.append(doc)
+
+        print(f"必选结果数量: {len(results)}")
+        print(f"待重排文档数量: {len(docs_to_rerank_text)}")
+
+        # 5. 仅对“待重排组”进行重排
+        if docs_to_rerank_text:
+            reranked_docs = self.rerank_documents(
+                query=rewritten_query, documents=docs_to_rerank_text
+            )
+            # 注意: reranked_docs 是 rerank 服务返回的结果，其长度是筛选后的
+            print(f"重排后通过筛选的数量:{len(reranked_docs)}")
+
+            text_to_emb_doc_map = {doc.text: doc for doc in docs_to_rerank_obj}
+
+            for reranked_doc in reranked_docs:
+                # 仅当分数达标时，才将重排后的结果加入最终列表
+                if reranked_doc["relevance_score"] > 6.5:
+                    doc_text = reranked_doc["document"]["text"]
+                    original_doc = text_to_emb_doc_map.get(doc_text)
+                    if original_doc:
+                        result = {
+                            "text": doc_text,
+                            "report_sha1": original_doc.report_sha1,
+                            "chunk_id": original_doc.chunk_id,
+                            "relevance_score": reranked_doc["relevance_score"],
+                        }
+                        results.append(result)
+
+        # 最终结果是两个互斥组的合并，因此无重复
         print(f"总共相关块数:{len(results)}")
-        return results
+        return {"results": results}
 
 
 if __name__ == "__main__":

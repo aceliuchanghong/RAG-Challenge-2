@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "click>=8.1.8",
     "easy-media-utils>=0.1.5",
+    "fastapi[all]>=0.115.11",
     "jieba>=0.42.1",
     "lancedb>=0.24.0",
     "litserve>=0.2.6",

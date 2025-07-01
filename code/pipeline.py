@@ -117,5 +117,6 @@ class Pipeline:
         question_related_docs = self.questions_processor.find_question_related_docs(
             question, complicated_question, tags
         )
+        # print(f"{question_related_docs}")
 
         return question_related_docs

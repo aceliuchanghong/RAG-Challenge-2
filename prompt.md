@@ -394,6 +394,14 @@ uv run run.py answer-question --table-name mp_database --question "CaCO3的A位�
 ---
 
 ```shell
+uv run run.py read-files --file-path no_git_oic/material_prediction_files2 --output no_git_oic/mp_output2/md
+uv run run.py chunk-markdown --md-file-path no_git_oic/mp_output2/md --output no_git_oic/mp_output2/chunked_md
+uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/mp_output2/chunked_md --table-name mp_database
+```
+
+---
+
+```shell
 uv run run.py read-files --file-path no_git_oic/torch_test_files --output no_git_oic/torch_output/md
 uv run run.py chunk-markdown --md-file-path no_git_oic/torch_output/md --output no_git_oic/torch_output/chunked_md
 uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/torch_output/chunked_md --table-name torch_database
@@ -417,7 +425,17 @@ class LanceDBSchema(LanceModel):
 
 ---
 
-
+```shell
+curl -X 'POST' \
+  'http://127.0.0.1:5000/get-docs/' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "question": "CaTiO3解释?",
+    "table_name": "mp_database",
+    "complicated_question": false,
+    "tags": ["python"]
+  }'
+```
 
 
 ---

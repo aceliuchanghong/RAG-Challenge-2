@@ -4,6 +4,7 @@
 
 ```shell
 uv run install.py
+-i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 ### 使用说明
@@ -79,9 +80,10 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 
 
 ### TODO
+- [x] 子问题检索逻辑优化
 - [ ] 表格处理
 - [ ] 图片处理
-- [ ] 对外API
+- [x] 对外API
 - [ ] 问题生成
 - [ ] 答案生成
 - [ ] 对比校验升级
