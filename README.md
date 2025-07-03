@@ -86,7 +86,7 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 - [x] 对外API
 - [ ] 问题生成
 - [ ] 答案生成
-- [ ] 对比校验升级
+- [ ] 对比别人项目
 
 
 1. **解析 PDF 报告**  

@@ -107,10 +107,19 @@ def _process_and_chunk_file(
 
 
 @cli.command()
-@click.option("--models", default="ShelterW/OCRFlux-3B", help="模型")
+@click.option("--models", default="nanonets/Nanonets-OCR-s", help="模型")
 @click.option("--source", default="ms", type=click.Choice(["ms", "hf"]), help="下载源")
 def download_models(models, source):
-    """Download required models from specified source."""
+    """
+    Download required models from specified source.
+
+    #### 主要测试了:
+    - nanonets/Nanonets-OCR-s
+    - monkeyOCR
+    - MinerU
+    - ChatDOC/OCRFlux-3B
+    - rapidai(ocr&table)
+    """
     click.echo(f"Downloading {models} models from {source}...")
 
     # 设置输出路径
@@ -119,14 +128,11 @@ def download_models(models, source):
 
     if source == "hf":
         # ChatDOC/OCRFlux-3B
-        from huggingface_hub import snapshot_download as hf_snapshot_download
+        from huggingface_hub import snapshot_download
 
         os.environ["HF_ENDPOINT"] = "https://huggingface.co"
-        snapshot_download = hf_snapshot_download
     else:
-        from modelscope import snapshot_download as ms_snapshot_download
-
-        snapshot_download = ms_snapshot_download
+        from modelscope import snapshot_download
 
     # 执行下载
     model_dir = snapshot_download(

@@ -17,9 +17,9 @@ PROMPT_WITH_EVIDENCE = """
         }},...
     ]
     ```
-4.  当引用或总结某份文档的信息时，必须在句末使用 `[report_sha1$$chunk_id]` 的格式明确标注来源，其中 report_sha1 和 chunk_id 源自 "provided_context"。
+4.  当引用或总结某份文档的信息时，必须在句末使用 `[report_sha1%%chunk_id]` 的格式明确标注来源，其中 report_sha1 和 chunk_id 源自 "provided_context"。
     ```
-    eg: [jhfrewn3514$$16]
+    eg: [jhfrewn3514%%16]
     ```
 5.  中文输出Markdown格式的答案。
 

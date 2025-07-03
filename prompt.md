@@ -399,6 +399,12 @@ uv run run.py chunk-markdown --md-file-path no_git_oic/mp_output2/md --output no
 uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/mp_output2/chunked_md --table-name mp_database
 ```
 
+```shell
+uv run run.py read-files --file-path no_git_oic/material_prediction_files3 --output no_git_oic/mp_output3/md
+uv run run.py chunk-markdown --md-file-path no_git_oic/mp_output3/md --output no_git_oic/mp_output3/chunked_md
+uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/mp_output3/chunked_md --table-name mp_database
+```
+
 ---
 
 ```shell
