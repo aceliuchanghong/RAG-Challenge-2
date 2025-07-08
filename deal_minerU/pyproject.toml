@@ -1,0 +1,9 @@
+[project]
+name = "deal_mineru"
+version = "0.1.0"
+description = "deal_mineru"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mineru[all,core]>=2.1.0",
+]

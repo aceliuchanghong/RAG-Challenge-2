@@ -446,7 +446,8 @@ curl -X 'POST' \
 
 ---
 
-
+cd no_git_oic/OCRFlux
+python -m ocrflux.pipeline ./localworkspace --data /mnt/data/llch/my_lm_log/no_git_oic/images/C23206C4_page_1.png --model /mnt/data/llch/Models/OCRFlux-3B/
 
 ---
 
