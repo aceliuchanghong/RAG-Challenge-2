@@ -20,6 +20,9 @@ huggingface-cli download opendatalab/MinerU2.0-2505-0.9B --local-dir /mnt/data/l
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 # 指定需要环境
 ./deal_minerU/.venv/bin/python
+
+
+ollama run qwen2.5vl
 ```
 
 
