@@ -5,6 +5,7 @@
 deactivate # 退出 当前env
 cd deal_minerU
 # uv venv .venv --python=3.12 # 创建的时候才需要执行 
+# uv init # 创建的时候才需要执行 
 source .venv/bin/activate
 
 -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -15,14 +16,27 @@ mineru --help
 
 # 模型下载
 huggingface-cli download opendatalab/MinerU2.0-2505-0.9B --local-dir /mnt/data/llch/Models/minerU_models/
-
+modelscope download --model OpenDataLab/MinerU2.0-2505-0.9B README.md --local_dir  /mnt/data/llch/Models/minerU_models/
 
 export CUDA_VISIBLE_DEVICES=0,1,2,3
 # 指定需要环境
 ./deal_minerU/.venv/bin/python
 
+export MINERU_MODEL_SOURCE=modelscope
+mineru-sglang-server --model-path /mnt/data/llch/Models/minerU_models --port 30000 
+nohup mineru-sglang-server --port 30000 --model-path /mnt/data/llch/Models/minerU_models >> no_git_oic/mineru-sglang-server.log 2>&1 &
 
 ollama run qwen2.5vl
+
+
+find /usr/lib /usr/lib64 -name "libcuda.so.*" 2>/dev/null
+- /usr/lib/x86_64-linux-gnu/libcuda.so.1
+- /usr/lib/x86_64-linux-gnu/libcuda.so.550.120
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu
+sudo ln -s /usr/lib/x86_64-linux-gnu/libcuda.so.1 /usr/lib64/libcuda.so
+
+export no_proxy="localhost,127.0.0.1"
 ```
 
 

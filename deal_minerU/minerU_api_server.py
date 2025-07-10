@@ -323,6 +323,7 @@ def read_root():
 
 """
 cd deal_minerU
+export no_proxy="localhost,127.0.0.1"
 
 uvicorn minerU_api_server:app --host 0.0.0.0 --port 5005
 nohup uvicorn minerU_api_server:app --host 0.0.0.0 --port 5005 > no_git_oic/minerU_api_server.log 2>&1 &
