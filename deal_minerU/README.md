@@ -26,6 +26,9 @@ export MINERU_MODEL_SOURCE=modelscope
 mineru-sglang-server --model-path /mnt/data/llch/Models/minerU_models --port 30000 
 nohup mineru-sglang-server --port 30000 --model-path /mnt/data/llch/Models/minerU_models >> no_git_oic/mineru-sglang-server.log 2>&1 &
 
+ps -ef | grep mineru-sglang-server
+lsof -t -i :30000 | xargs kill -9
+
 ollama run qwen2.5vl
 
 
@@ -39,6 +42,18 @@ sudo ln -s /usr/lib/x86_64-linux-gnu/libcuda.so.1 /usr/lib64/libcuda.so
 export no_proxy="localhost,127.0.0.1"
 ```
 
+## 内网服务
+
+```shell
+curl http://localhost:11434/api/generate -d '{"model": "qwen3", "keep_alive": -1}'
+curl http://localhost:11434/api/generate -d '{"model": "qwen3", "keep_alive": 0}'
+
+export no_proxy="localhost,127.0.0.1,121.205.3.100"
+curl -X 'POST' \
+  'http://121.205.3.100:5005/trans2md/' \
+  -H 'accept: application/json' \
+  -F 'files=@/mnt/data/llch/RAG-Challenge-2/no_git_oic/test_J2.png'
+```
 
 ---
 

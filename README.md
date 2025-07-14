@@ -96,7 +96,7 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 
 2. **序列化表格（可选）**  
    - 运行 `python main.py serialize_tables --max-workers 10`，处理解析后的报告中的表格。  
-   - 此步骤使用 `src/tables_serialization/TableSerializer.py`，但文章提到最终解决方案未使用序列化表格，因其略微降低效果，可根据需要选择是否执行。
+   - 此步骤使用 `src/tables_serialization/TableSerializer.py`
 
 3. **处理报告**  
    - 运行 `python main.py process_reports --config no_ser_tab`，处理解析后的报告。  

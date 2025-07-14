@@ -370,5 +370,5 @@ curl -X 'POST' \
   -F 'backend=vlm-sglang-client' \
   -F 'server_url=http://127.0.0.1:30000' \
   -F 'use_visual_model=true' \
-  -F 'visual_model_prompt=请将此图像内容转换为结构化 Markdown 格式'
+  -F 'visual_model_prompt=对图片进行OCR,输出markdown格式'
 """
