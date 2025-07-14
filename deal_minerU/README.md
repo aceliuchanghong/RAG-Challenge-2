@@ -49,10 +49,19 @@ curl http://localhost:11434/api/generate -d '{"model": "qwen3", "keep_alive": -1
 curl http://localhost:11434/api/generate -d '{"model": "qwen3", "keep_alive": 0}'
 
 export no_proxy="localhost,127.0.0.1,121.205.3.100"
+
 curl -X 'POST' \
   'http://121.205.3.100:5005/trans2md/' \
   -H 'accept: application/json' \
-  -F 'files=@/mnt/data/llch/RAG-Challenge-2/no_git_oic/test_J2.png'
+  -F 'files=@/mnt/data/llch/RAG-Challenge-2/no_git_oic/test_J2.png' \
+  -F 'use_visual_model=true'
+
+curl -X 'POST' \
+  'http://121.205.3.100:5005/trans2md/' \
+  -H 'accept: application/json' \
+  -F 'files=@/mnt/data/llch/RAG-Challenge-2/no_git_oic/image.png' \
+  -F 'use_visual_model=true' \
+  -F 'visual_model_prompt=对图片进行OCR,输出markdown格式'
 ```
 
 ---

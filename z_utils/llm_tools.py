@@ -53,8 +53,9 @@ nohup python -m vllm.entrypoints.openai.api_server \
         --port 6006 \
         --host 0.0.0.0 \
         --api-key torch-elskenrgvoiserngviopsejrmoief \
-        --gpu_memory_utilization 0.6 \
+        --gpu_memory_utilization 0.60 \
         --limit-mm-per-prompt image=3,video=3 \
+        --allowed-local-media-path /mnt/data/ \
         > vllm_Qwen2.5-VL-32B-Instruct.log 2>&1 &
         
 messages = [

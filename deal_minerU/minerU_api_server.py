@@ -187,9 +187,12 @@ def deal_md_pics(md_content, file_stem, prompt):
     from tools import replacer
     import re
 
-    image_pattern = re.compile(r"!\[(.*?)\]\((.*?)\)")
-    replacer_with_prompt = partial(replacer, file_stem=file_stem, prompt=prompt)
-    new_md_content = image_pattern.sub(replacer_with_prompt, md_content)
+    try:
+        image_pattern = re.compile(r"!\[(.*?)\]\((.*?)\)")
+        replacer_with_prompt = partial(replacer, file_stem=file_stem, prompt=prompt)
+        new_md_content = image_pattern.sub(replacer_with_prompt, md_content)
+    except Exception as e:
+        print(f"寻找图片表格失败: {e}")
 
     return new_md_content
 
@@ -289,9 +292,15 @@ async def trans2md_api(
         try:
             with open(md_file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-                if use_visual_model:
+            if use_visual_model:
+                try:
                     content = deal_md_pics(content, file_stem, visual_model_prompt)
+                except Exception as e:
+                    print(f"md_file_path:{md_file_path}")
+                    print(f">>> 在 deal_md_pics 的 try...except 块中捕获到异常: {e}")
+
         except Exception as e:
+            print(f"md_file_path:{md_file_path}")
             raise HTTPException(
                 status_code=500, detail=f"无法读取 Markdown 文件内容: {e}"
             )
@@ -323,10 +332,11 @@ def read_root():
 
 """
 cd deal_minerU
-export no_proxy="localhost,127.0.0.1"
 
+export no_proxy="localhost,127.0.0.1,192.168.180.39"
 uvicorn minerU_api_server:app --host 0.0.0.0 --port 5005
 nohup uvicorn minerU_api_server:app --host 0.0.0.0 --port 5005 > no_git_oic/minerU_api_server.log 2>&1 &
+
 ps -ef | grep minerU_api_server
 lsof -i :5005
 
