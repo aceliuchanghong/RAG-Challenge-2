@@ -414,6 +414,10 @@ uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/torch_output/chunked_md 
 uv run run.py answer-question --table-name torch_database --question "上班如果迟到怎么处理" --stream --complicated-question
 ```
 
+```shell
+uv run run.py read-files --file-path 'deal_minerU/no_git_oic/upload_files_md_output/layout2 copy/vlm/layout2_copy.md' --output no_git_oic/read_test_dir/md
+uv run run.py chunk-markdown --md-file-path no_git_oic/read_test_dir/md --output no_git_oic/read_test_dir/chunked_md
+```
 
 ---
 

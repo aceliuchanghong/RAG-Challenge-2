@@ -7,12 +7,6 @@ resolution-markers = [
     "(platform_machine != 'aarch64' and sys_platform == 'linux') or (sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 
-[manifest]
-members = [
-    "rag-challenge",
-    "test-hanlp",
-]
-
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -1149,11 +1143,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/37/72/88311445fd44c455c
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/be/df630c387a0a054815d60be6a97eb4e8f17385d5d6fe660e1c02750062b4/termcolor-2.5.0-py3-none-any.whl", hash = "sha256:37b17b5fc1e604945c2642c872a3764b5d547a48009871aea3edd3afa180afb8", size = 7755, upload-time = "2024-10-06T19:50:02.097Z" },
 ]
-
-[[package]]
-name = "test-hanlp"
-version = "0.1.0"
-source = { virtual = "test_hanlp" }
 
 [[package]]
 name = "tiktoken"

@@ -7,6 +7,7 @@ import shutil
 from openai import OpenAI
 import time
 from typing import Optional
+import asyncio
 
 from z_utils.hash_x import compute_mdhash_id
 from code.pipeline import Pipeline
@@ -60,12 +61,13 @@ def _process_file(file_path: Path, output_dir: str):
         )
 
 
-def _process_and_chunk_file(
+async def _process_and_chunk_file(
     md_file_path: Path,
     chunk_size: int,
     chunk_overlap: int,
     output_dir: str,
     tags: tuple[str],
+    ser_tab: bool,
 ):
     """
     处理单个md文件的切片核心逻辑。
@@ -79,11 +81,12 @@ def _process_and_chunk_file(
     try:
         pipeline = Pipeline(root_path)
         click.echo(colored(f"Chunking markdown file: {md_file_path.name}", "yellow"))
-        chunks = pipeline.chunk_md_file(
+        chunks = await pipeline.chunk_md_file(
             str(md_file_path),
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
             tags=tags,
+            ser_tab=ser_tab,
         )
         file_hash = extract_hash(md_file_path.name)
         output_path = Path(output_dir) / ("chunked_" + file_hash + ".jsonl")
@@ -204,7 +207,8 @@ def read_files(file_path, output):
 @click.option("--chunk-overlap", default=50, type=int, help="切块重合大小")
 @click.option("--output", default="output/chunked_md", help="输出目录")
 @click.option("--tags", multiple=True, help="添加 tags")
-def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags):
+@click.option("--ser-tab", is_flag=True, default=False, help="开启表格处理")
+def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags, ser_tab):
     """
     将一个 'md_{hash}.md' 文件或一个目录中所有符合该格式的文件进行切片。
     """
@@ -216,7 +220,11 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags):
         try:
             # 验证文件名格式是否正确
             extract_hash(path.name)
-            _process_and_chunk_file(path, chunk_size, chunk_overlap, output, tags)
+            asyncio.run(
+                _process_and_chunk_file(
+                    path, chunk_size, chunk_overlap, output, tags, ser_tab
+                )
+            )
         except ValueError as e:
             # 文件名格式不正确，进行提示并跳过
             click.echo(colored(f"Skipping file: {path.name}. Reason: {e}", "magenta"))
@@ -228,8 +236,10 @@ def chunk_markdown(md_file_path, chunk_size, chunk_overlap, output, tags):
                 try:
                     # 验证文件名格式是否正确，不正确则跳过
                     extract_hash(item.name)
-                    _process_and_chunk_file(
-                        item, chunk_size, chunk_overlap, output, tags
+                    asyncio.run(
+                        _process_and_chunk_file(
+                            item, chunk_size, chunk_overlap, output, tags, ser_tab
+                        )
                     )
                     processed_count += 1
                 except ValueError:

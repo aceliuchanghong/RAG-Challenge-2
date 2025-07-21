@@ -66,12 +66,13 @@ def query_documents(
         raise
 
 
-def process_files_in_pipeline(
+async def process_files_in_pipeline(
     input_path: str,
     table_name: str = "file_chunks",
     chunk_size: int = 300,
     chunk_overlap: int = 50,
     tags: List[str] = [],
+    ser_tab: bool = False,
     root_path: Path = "./",
 ) -> Dict[str, Any]:
     """
@@ -161,11 +162,12 @@ def process_files_in_pipeline(
             for md_path in md_file_paths:
                 logging.info(f"正在分块 Markdown 文件: {md_path.name}")
                 # 使用 pipeline.chunk_md_file
-                chunks = pipeline.chunk_md_file(
+                chunks = await pipeline.chunk_md_file(
                     str(md_path),
                     chunk_size=chunk_size,
                     chunk_overlap=chunk_overlap,
                     tags=tuple(tags),  # 确保是元组
+                    ser_tab=ser_tab,
                 )
 
                 if chunks:

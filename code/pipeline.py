@@ -68,21 +68,25 @@ class Pipeline:
 
         return content
 
-    def chunk_md_file(
+    async def chunk_md_file(
         self,
         md_file_path: str,
         chunk_size: int = 300,
         chunk_overlap: int = 50,
         tags: tuple[str] = None,
+        ser_tab: bool = False,
     ) -> dict:
         """
         Chunk a markdown file into smaller parts based on the specified chunk size and overlap.
         """
 
         splitter = CustomRecursiveCharacterTextSplitter(
-            chunk_size=chunk_size, chunk_overlap=chunk_overlap, tags=tags
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            tags=tags,
+            ser_tab=ser_tab,
         )
-        return splitter.split_text(md_file_path)
+        return await splitter.split_text(md_file_path)
 
     def save2lacncedb(
         self, report_or_reports_dir: str, table_name: str = "file_chunks"
