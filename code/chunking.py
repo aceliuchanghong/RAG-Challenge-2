@@ -91,11 +91,11 @@ class CustomRecursiveCharacterTextSplitter:
                 context_before = text[:start]
                 context_after = text[end:]
 
-                # 异步序列化表格
+                # 异步序列化表格==> TODO 此处需要多并发
                 serialized_blocks = await self.serializer.serialize_table(
                     table_html=table_html,
-                    context_before=context_before,
-                    context_after=context_after,
+                    # context_before=context_before[-100:],
+                    # context_after=context_after[:100],
                 )
 
                 # 将序列化后的内容（字典列表）转换为字符串并添加到处理后的文本中

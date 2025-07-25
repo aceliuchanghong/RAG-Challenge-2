@@ -16,6 +16,7 @@ sys.path.insert(
     os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../")),
 )
 from z_utils.get_json import parse_json_markdown
+from z_utils.sqlite_cache import cache_to_sqlite_async
 
 
 class TableSerializer:
@@ -43,27 +44,28 @@ class TableSerializer:
             "JSON格式示例:\n"
             "```json\n"
             "[\n"
-            '  {"content": "根据公司年度报告，A产品在2023年第一季度的销售额为150万元。"},\n'
-            '  {"content": "根据公司年度报告，B产品在2023年第二季度的销售额为180万元。"}\n'
+            '  {"content": "A产品在2023年第一季度的销售额为150万元。"},\n'
+            '  {"content": "B产品在2023年第二季度的销售额为180万元。"}\n'
             "]\n"
             "```\n"
             "不要在你的回答中包含除了这个JSON数组之外的任何额外文本、解释或注释"
         )
         input_data = []
         if context_before:
-            input_data.append(f"--- 表格前置上下文 ---\n{context_before}\n")
-        input_data.append(f"--- HTML表格 ---\n{table_html}\n")
+            input_data.append(f"--- 表格前置上下文如下 ---\n{context_before}\n")
+        input_data.append(f"--- 需要转化的HTML表格如下 ---\n{table_html}\n")
         if context_after:
             input_data.append(f"--- 表格后置上下文 ---\n{context_after}\n")
         final_prompt = (
             f"{instructions}\n\n"
             f"{format_requirements}\n\n"
-            f"--- 请处理以下输入数据 ---\n"
+            f"## 请处理以下输入数据:\n\n"
             f"{''.join(input_data)}\n"
             "现在，请开始生成序列化的JSON信息块。"
         )
         return final_prompt
 
+    @cache_to_sqlite_async(debug=False)
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -76,6 +78,8 @@ class TableSerializer:
         self, table_html: str, context_before: str = "", context_after: str = ""
     ) -> List[str]:
         """
+        delete from stock_cache where params='3a5258add63de7216e6acfc68a2c79d2'
+
         返回示例:
         [
             {'content': '根据公司年度报告，A产品在2023年第一季度的销售额为150万元，第二季度的销售额为200万元，总计销售额为350万元。'},
@@ -85,6 +89,13 @@ class TableSerializer:
         user_prompt = self._build_user_prompt(table_html, context_before, context_after)
         print(f"正在向模型 '{self.model}' 发送表格序列化请求 (要求JSON输出)...")
         try:
+            if len(table_html) > 12800:
+                print("警告：原始表格过长,怀疑错误输出。")
+                return [{"content": table_html}]
+            if "<table><tr><td>旧底图总号</td><td>" in table_html:
+                print("警告：表格包含旧底图总号，多半没什么用")
+                return [{"content": table_html}]
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -100,7 +111,7 @@ class TableSerializer:
                 print(
                     "警告：模型返回的内容无法解析或为空。将返回原始表格作为降级方案。"
                 )
-                return [table_html]
+                return [{"content": table_html}]
         except Exception as e:
             print(f"调用大模型时发生错误: {e}")
             raise

@@ -6,4 +6,6 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "mineru[all,core]>=2.1.0",
+    "pymupdf>=1.26.3",
+    "termcolor>=3.1.0",
 ]

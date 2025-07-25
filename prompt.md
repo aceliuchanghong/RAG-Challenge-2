@@ -419,6 +419,17 @@ uv run run.py read-files --file-path 'deal_minerU/no_git_oic/upload_files_md_out
 uv run run.py chunk-markdown --md-file-path no_git_oic/read_test_dir/md --output no_git_oic/read_test_dir/chunked_md
 ```
 
+```shell
+uv run run.py read-files --file-path 'deal_minerU/no_git_oic/save_md/NPD2308.md' --output no_git_oic/mlcc/md
+uv run run.py chunk-markdown --md-file-path no_git_oic/mlcc/md --output no_git_oic/mlcc/chunked_md --tags CT4701 --ser-tab
+uv run run.py save-jsonl --jsonl-path-or-dir no_git_oic/mlcc/chunked_md --table-name mlcc_database
+uv run run.py answer-question --table-name mlcc_database --question "CT4701型金属支架表面贴装脉冲功率瓷介固定电容器框架电镀工序工艺规程解释" --stream --tags CT4701
+
+# 工艺流程卡(TE-QR-G914-1)里面锡铅槽成分的控制要求
+# CT4701型金属支架表面贴装脉冲功率瓷介固定电容器框架电镀工序工艺规程解释
+# 工序号为G02的固化温度和固化时间
+```
+
 ---
 
 我在做rag,设计向量数据库的表,我在考虑要不要加2个备用字段和一个tags字段,这个tags字段怎么设计呢?
