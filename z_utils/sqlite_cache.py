@@ -8,17 +8,19 @@ from io import StringIO
 from termcolor import colored
 import traceback
 import inspect
+from pathlib import Path
 
 
 def json_serializer(obj):
     """
-    自定义JSON序列化器。
-    当json.dumps遇到它不认识的类型时，会调用这个函数。
-    这里我们主要处理日期、时间和pandas时间戳对象。
+    自定义JSON序列化器
     """
+    # 优先处理日期和时间戳
     if isinstance(obj, (datetime, date, pd.Timestamp)):
-        # 将日期/时间对象转换为ISO 8601格式的字符串，这是一种标准格式
         return obj.isoformat()
+    # 如果对象是Path类型，则将其转换为字符串
+    if isinstance(obj, Path):
+        return str(obj)
     # 如果遇到其他无法处理的类型，则抛出原始的TypeError
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 

@@ -178,3 +178,4 @@ marimo.toml
 output/
 lancedb/
 lancedb_tmp/
+tasks.duckdb
