@@ -188,8 +188,9 @@ async def run_processing_pipeline(
             {"markdown_path": markdown_file_path, "status": "embedding_and_storing"},
         )
         print(
-            f"任务 {task_id}: Markdown转换完成，位于 {markdown_file_path}。开始向量化..."
+            f"任务 {task_id}: Markdown转换完成 位于 {markdown_file_path}。开始 chunk+emb..."
         )
+        print(f"参数 {table_name},{tags},{ser_tab}")
 
         result = await process_files_in_pipeline(
             input_path=markdown_file_path,
@@ -221,9 +222,7 @@ async def upload_and_process_api(
     table_name: str = Form("file_chunks", description="数据要存入的 LanceDB 表名。"),
     chunk_size: int = Form(300, description="文本分块的大小。"),
     chunk_overlap: int = Form(50, description="文本分块的重叠大小。"),
-    tags: Optional[List[str]] = Form(
-        None, description="与文件关联的标签列表。例如：--tags test1 --tags test2"
-    ),
+    tags: Optional[List[str]] = Form(None, description="与文件关联的标签列表"),
     ser_tab: bool = Form(True, description="是否序列化表格"),
 ):
     """接收上传文件，立即返回一个任务ID，并在后台异步执行完整的处理流水线。"""
@@ -372,5 +371,21 @@ curl -X POST "http://127.0.0.1:5000/upload-and-process-async/" \
      -F "files=@/mnt/data/llch/RAG-Challenge-2/no_git_oic/22.pdf" \
      -F "table_name=my_test_table"
 
+curl -X POST "http://127.0.0.1:5000/upload-and-process-async/" \
+     -F "files=@/mnt/data/llch/RAG-Challenge-2/no_git_oic/NPD2308工艺文件.pdf" \
+     -F "table_name=my_test_table" \
+     -F "tags=NPD2308工艺"
+
+# 完整示例
+curl -X POST "http://127.0.0.1:5000/upload-and-process-async/" \
+  -F "files=@/path/to/your/NPD2308工艺文件.pdf" \
+  -F "table_name=new_process_docs" \
+  -F "chunk_size=500" \
+  -F "chunk_overlap=100" \
+  -F "tags=NPD2308工艺" \
+  -F "tags=芯片制造" \
+  -F "ser_tab=true"
+
+# 查看对应异步任务状态
 curl http://127.0.0.1:5000/status/0507a154-3f2c-4420-95a0-41dcc220397b
 """

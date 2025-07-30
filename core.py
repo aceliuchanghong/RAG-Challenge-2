@@ -10,9 +10,7 @@ import aiofiles
 import asyncio
 import os
 import fitz
-import tempfile
 import base64
-import hashlib
 
 
 logging.basicConfig(
@@ -55,10 +53,10 @@ async def trans2md_async(
         raise FileNotFoundError(f"错误：找不到文件 '{image_path}'")
     if use_visual_model and not visual_model_prompt:
         visual_model_prompt = """
-你是一位 MLCC 专家，你的任务是分析图片，生成结构化的JSON数据，以便于后续的检索和问答。
+分析图片，生成结构化的JSON数据，以便于后续的检索和问答。
 
 # 输出要求：
-请严格按照以下JSON格式输出你的分析结果，不要添加任何额外的解释。
+请严格按照以下JSON格式输出分析结果，不要添加任何额外的解释。
 
 {
   "content_description": "（详细描述工艺流程图的逻辑，先什么后什么，它们之间的关系是怎样的。力求详尽、客观。）",
@@ -238,10 +236,23 @@ async def get_std_md(
         print("没有需要处理的图片。")
         return ""
 
+    # 创建一个Semaphore，并将并发数限制为 4
+    semaphore = asyncio.Semaphore(4)
+
+    async def process_with_semaphore(img_path):
+        # async with 会自动获取和释放 semaphore
+        async with semaphore:
+            print(f"开始处理: {img_path}")
+            # 等待 trans2md_async 完成
+            result = await trans2md_async(img_path)
+            print(f"完成处理: {img_path}")
+            return result
+
     tasks = []
     print(f"准备处理的图片: {image_paths_to_process}")
+
     for img_path in image_paths_to_process:
-        tasks.append(trans2md_async(img_path))
+        tasks.append(process_with_semaphore(img_path))
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 

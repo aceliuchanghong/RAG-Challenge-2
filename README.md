@@ -9,15 +9,17 @@ uv run install.py
 
 ### 使用说明
 
-- 使用帮助
+- **使用帮助**
 
 ```bash
 uv run run.py --help
+uv run run.py read-files --help
 uv run run.py chunk-markdown --help
+uv run run.py save-jsonl --help
 ...
 ```
 
-- 常用命令示例
+- 单个命令测试示例
 
 ```shell
 uv run run.py read-files --file-path no_git_oic/test_files/流式细胞制备方案.pdf
@@ -38,14 +40,18 @@ uv run run.py chunk-markdown --md-file-path output/md/md_c6f5b8c6fc281b49f3b50cc
 uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6fc281b49f3b50cc778c5cecc.jsonl --table-name sanguo
 ```
 
+- api服务启动
+
+```shell
+# 具体可看`api_server.py`文件里面下方 readme
+uvicorn api_server:app --host 0.0.0.0 --port 5000
+```
 
 ### 思路
 ```
 [用户问题]
      ↓
 [Query Preprocessor] → 清洗、意图识别、是否存在判断（Existence Checker）
-     ↓
-[Router] → 决定是否需跨文档检索或多跳检索
      ↓
 [Retriever] → 多路召回 Top-k 文档（BM25 + Dense Retriever）
      ↓
@@ -60,7 +66,24 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 [Answer Output] → 返回结构化 JSON 答案
 ```
 
+### 模型使用为何
+
+```
+问题回答接口:
+     question-->[llm]重写问题-->[emb]检索答案-->[rerank]重排-->[llm]生成答案
+文档检索接口:
+     question-->[llm]重写问题-->[emb]检索答案-->[rerank]重排
+可读文档保存接口:
+     files-->标准md-->切分-->[emb]向量化-->[lancedb]保存到指定表里面
+不可读pdf/图片类文档保存接口:
+     files-->[minerU]还原md-->[llm]处理表格-->标准md-->基于表格图片的切分-->[emb]向量化-->[lancedb]保存到指定表里面
+                         ↘                 ↗
+                           ↘             ↗
+                             [vlm]处理图片
+```
+
 ### 难点
+
 |难点|具体体现|
 |-------|--------|
 |海量异构 PDF 解析-文档多样性与解析难度|包含 PDF、Word、网页等多种格式；存在双栏、旋转表格、图表混排等结构，导致通用解析器效果不佳|
@@ -77,58 +100,3 @@ uv run run.py save-jsonl --jsonl-path-or-dir output/chunked_md/chunked_c6f5b8c6f
 |模型偏差与公平性|不同模型可能偏向特定类型内容或表达方式，影响结果一致性与客观性|
 |流水线稳定性|各模块之间耦合性强，一处出错可能导致整个流程失败，需良好的异常处理机制|
 |评估指标透明化|评分标准公开且严格，系统必须保证每一步骤都可复现、可验证，避免“黑盒”操作|
-
-
-### TODO
-- [x] 子问题检索逻辑优化
-- [x] 表格处理
-- [x] 图片处理
-- [x] 对外API
-- [ ] 问题生成
-- [ ] 答案生成
-- [ ] 对比别人项目
-
-
-1. **解析 PDF 报告**  
-   - 运行 `python main.py parse_pdfs --parallel --chunk-size 2 --max-workers 10`，以并行方式解析 PDF 报告。  
-   - 此步骤使用 `src/pdf_parsing/PDFParser.py` 中的 `PDFParser` 类，基于 Docling 提取文本和结构，输出存储在 `01_parsed_reports` 目录。  
-   - 根据文章描述，解析 100 个 PDF（每份最多 1000 页）耗时 40 分钟，使用 GPU（如 4090）可加速。
-
-2. **序列化表格（可选）**  
-   - 运行 `python main.py serialize_tables --max-workers 10`，处理解析后的报告中的表格。  
-   - 此步骤使用 `src/tables_serialization/TableSerializer.py`
-
-3. **处理报告**  
-   - 运行 `python main.py process_reports --config no_ser_tab`，处理解析后的报告。  
-   - 此步骤包括多个子阶段：  
-     - **合并报告**：使用 `merge_reports` 方法，调用 `src/parsed_reports_merging/PageTextPreparation.py` 合并多页数据。  
-     - **导出为 Markdown**：使用 `export_reports_to_markdown` 将合并后的报告转换为 Markdown 格式，便于后续处理。  
-     - **文本分割**：使用 `chunk_reports`，调用 `src/text_splitter/TextSplitter.py`，将文本分割为 300 令牌的块，50 令牌重叠。  
-     - **创建向量数据库**：使用 `create_vector_dbs`，调用 `src/ingestion/VectorDBIngestor.py`，使用 FAISS 和 text-embedding-3-large 嵌入创建向量数据库。  
-   - 配置 `no_ser_tab` 表示不使用序列化表格，适合最佳性能。
-
-4. **处理问题**  
-   - 运行 `python main.py process_questions --config max_nst_o3m`，处理问题以生成答案。  
-   - 此步骤使用 `src/questions_processing/QuestionsProcessor.py`，包括：  
-     - 检索：从向量数据库中获取前 30 个块。  
-     - 重新排序：使用 LLM（如 GPT-4o-mini）重新排序，成本小于 1 美分/问题，最终选择前 10 页。  
-     - 生成：使用链式思维（Chain of Thought）、结构化输出和单次提示生成答案，支持比较查询通过多查询路由处理。  
-   - 系统可在 2 分钟内完成 100 个问题，最初目标为 10 分钟限制（后延长）。
-
-#### 代码模块学习
-为了深入理解，逐个研究以下关键 Python 文件，理解其功能：
-
-| **模块**                          | **描述**                                      | **文件路径**                          |
-|-----------------------------------|----------------------------------------------|---------------------------------------|
-| PDF 解析                          | 使用 Docling 解析 PDF，提取文本和结构         | `src/pdf_parsing/PDFParser.py`        |
-| 表格序列化                        | 处理报告中的表格（可选）                      | `src/tables_serialization/TableSerializer.py` |
-| 报告合并                          | 合并解析后的多页数据                          | `src/parsed_reports_merging/PageTextPreparation.py` |
-| 文本分割                          | 将文本分割为块，300 令牌，50 令牌重叠         | `src/text_splitter/TextSplitter.py`   |
-| 向量数据库创建                    | 使用 FAISS 和嵌入创建向量数据库               | `src/ingestion/VectorDBIngestor.py`   |
-| BM25 数据库创建（若使用）          | 创建基于 BM25 的数据库                        | `src/ingestion/BM25Ingestor.py`       |
-| 问题处理                          | 检索、重新排序和生成答案                      | `src/questions_processing/QuestionsProcessor.py` |
-
-
-### Reference
-- [教程](https://gemini.google.com/app/c319b9cc7507faa0)
-- 

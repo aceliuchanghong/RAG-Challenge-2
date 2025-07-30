@@ -22,6 +22,7 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 # 指定需要环境
 ./deal_minerU/.venv/bin/python
 
+# 模型服务启动
 export MINERU_MODEL_SOURCE=modelscope
 mineru-sglang-server --model-path /mnt/data/llch/Models/minerU_models --port 30000 
 nohup mineru-sglang-server --port 30000 --model-path /mnt/data/llch/Models/minerU_models >> no_git_oic/mineru-sglang-server.log 2>&1 &
