@@ -174,7 +174,7 @@ async def run_processing_pipeline(
     """这个函数将在后台运行，执行完整的处理流程，并更新DuckDB中的状态。"""
     try:
         update_task_in_db(task_id, {"status": "converting_to_markdown"})
-        print(f"任务 {task_id}: 开始Markdown转换...")
+        print(f"任务 {task_id}: 开始 MinerU 请求...")
 
         input_data_for_md = (
             input_files_paths[0] if len(input_files_paths) == 1 else input_files_paths
@@ -188,9 +188,9 @@ async def run_processing_pipeline(
             {"markdown_path": markdown_file_path, "status": "embedding_and_storing"},
         )
         print(
-            f"任务 {task_id}: Markdown转换完成 位于 {markdown_file_path}。开始 chunk+emb..."
+            f"任务 {task_id}: minerU 转换完成:{markdown_file_path}。开始 chunk & emb..."
         )
-        print(f"参数 {table_name},{tags},{ser_tab}")
+        # print(f"参数 {table_name},{tags},{ser_tab}")
 
         result = await process_files_in_pipeline(
             input_path=markdown_file_path,

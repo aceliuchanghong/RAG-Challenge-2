@@ -56,12 +56,12 @@ def judge_files(file_input_list):
         else:
             un_readable.append(file_path)
 
-    print(colored(f"Unreadable files: {un_readable}", "light_yellow"))
-    print(colored(f"Readable files: {readable}", "light_yellow"))
+    # print(colored(f"Unreadable files: {un_readable}", "light_yellow"))
+    # print(colored(f"Readable files: {readable}", "light_yellow"))
     return un_readable, readable
 
 
-def deal_readable_list(
+def deal_readable_file_list(
     readable_file_list, table_name, chunk_size, chunk_overlap, tags_input
 ):
     api_base_url = "http://127.0.0.1:5000"
@@ -72,10 +72,10 @@ def deal_readable_list(
     successful_files = []
     failed_files = []
 
-    print(f"\n--- 开始处理 {len(readable_file_list)} 个文件 ---")
+    print(f"\n--- ⚡⚡开始同步处理 {len(readable_file_list)} 个文件⚡⚡ ---")
 
     for index, file_path in enumerate(readable_file_list):
-        print(f"\n[{index + 1}/{len(readable_file_list)}] 正在处理文件: {file_path}...")
+        print(f"[{index + 1}/{len(readable_file_list)}] 正在处理文件: {file_path}...")
 
         payload = {
             "input_path": file_path,
@@ -117,18 +117,15 @@ def deal_readable_list(
             print(f"  ❌ 失败: {error_message}")
             failed_files.append({"file": file_path, "error": error_message})
 
-    print("\n--- 处理完成 ---")
-    print(f"总计: {len(readable_file_list)} 个可读文件")
-    print(f"成功: {len(successful_files)} 个可读文件")
-    print(f"失败: {len(failed_files)} 个可读文件")
+    print(f"--- ⚡⚡结束同步处理 {len(readable_file_list)} 个文件⚡⚡ ---")
 
     return {
-        "successful_files": successful_files,
-        "failed_files": failed_files,
+        "successful_readable_files": successful_files,
+        "failed_readable_files": failed_files,
     }
 
 
-def deal_unreadable_list(
+def deal_unreadable_file_list(
     un_readable_file_list: List[str],
     table_name: str,
     chunk_size: int,
@@ -157,11 +154,11 @@ def deal_unreadable_list(
     successful_files = []
     failed_files = []
 
-    print(f"\n--- 开始异步处理 {len(un_readable_file_list)} 个文件 ---")
+    print(f"\n--- ⚡⚡开始异步处理 {len(un_readable_file_list)} 个文件⚡⚡ ---")
 
     for index, file_path in enumerate(un_readable_file_list):
         print(
-            f"\n[{index + 1}/{len(un_readable_file_list)}] 正在上传文件: {file_path}..."
+            f"[{index + 1}/{len(un_readable_file_list)}] 正在上传文件: {file_path}..."
         )
 
         # 准备 multipart/form-data 请求体
@@ -219,19 +216,19 @@ def deal_unreadable_list(
             print(f"  ❌ 失败: {error_message}")
             failed_files.append({"file": file_path, "error": error_message})
 
-    print("\n--- 异步处理任务启动完成 ---")
-    print(f"总计: {len(un_readable_file_list)} 个不可读文件")
-    print(f"成功启动任务: {len(successful_files)} 个不可读文件")
-    print(f"上传失败: {len(failed_files)} 个不可读文件")
+    print(f"--- ⚡⚡结束异步处理 {len(un_readable_file_list)} 个文件⚡⚡ ---")
 
     return {
-        "successful_files": successful_files,
-        "failed_files": failed_files,
+        "successful_unreadable_files": successful_files,
+        "failed_unreadable_files": failed_files,
     }
 
 
-def save_files(file_input_list, table_name, chunk_size, chunk_overlap, tags_input):
-    """ """
+def deal_upload_files(
+    file_input_list, table_name, chunk_size, chunk_overlap, tags_input
+):
+    """处理上传的文件"""
+
     un_readable_file_list, readable_file_list = judge_files(file_input_list)
 
     eng_table_name = table_name_dict[table_name]
@@ -240,7 +237,7 @@ def save_files(file_input_list, table_name, chunk_size, chunk_overlap, tags_inpu
 
     if len(readable_file_list) > 0:
         try:
-            readable_file_result_dict = deal_readable_list(
+            readable_file_result_dict = deal_readable_file_list(
                 readable_file_list,
                 eng_table_name,
                 chunk_size,
@@ -249,11 +246,11 @@ def save_files(file_input_list, table_name, chunk_size, chunk_overlap, tags_inpu
             )
             result_dict.update(readable_file_result_dict)
         except Exception as e:
-            print(colored(f"ERR:deal_readable_list:{e}", "red"))
+            print(colored(f"ERR:deal_readable_file_list:{e}", "red"))
 
     if len(un_readable_file_list) > 0:
         try:
-            un_readable_file_result_dict = deal_unreadable_list(
+            un_readable_file_result_dict = deal_unreadable_file_list(
                 un_readable_file_list,
                 eng_table_name,
                 chunk_size,
@@ -262,7 +259,7 @@ def save_files(file_input_list, table_name, chunk_size, chunk_overlap, tags_inpu
             )
             result_dict.update(un_readable_file_result_dict)
         except Exception as e:
-            print(colored(f"ERR:deal_readable_list:{e}", "red"))
+            print(colored(f"ERR:deal_unreadable_file_list:{e}", "red"))
 
     return json.dumps(result_dict, ensure_ascii=False, indent=2)
 
@@ -300,12 +297,12 @@ def get_task_status(task_id: str):
 
 def create_app():
     with gr.Blocks(theme=gr.themes.Soft(), title="研发知识文件上传", css=css) as demo:
-        gr.Markdown("## 文件上传与异步处理接口")
+        gr.Markdown("## 扫描版文件上传与异步处理")
 
         with gr.Row():
             with gr.Column():
                 file_input_list = gr.File(
-                    label="点击上传文件",
+                    label="点击上传文件(pptx,docx 文件建议转为扫描版 pdf 处理)",
                     file_count="multiple",
                     file_types=[".pdf", ".docx", ".txt", ".md", ".pptx", "image"],
                 )
@@ -320,18 +317,20 @@ def create_app():
 
                 with gr.Accordion("参数设置", open=False):
                     chunk_size = gr.Slider(
-                        minimum=200,
+                        minimum=300,
                         maximum=400,
                         step=10,
                         value=300,
                         label="分块大小",
+                        info="不建议修改",
                     )
                     chunk_overlap = gr.Slider(
-                        minimum=40,
+                        minimum=50,
                         maximum=60,
                         step=1,
                         value=50,
                         label="分块重叠",
+                        info="不建议修改",
                     )
                     tags_input = gr.Dropdown(
                         label="标签 (输入后按 Enter 添加)",
@@ -341,12 +340,12 @@ def create_app():
                         allow_custom_value=True,
                     )
                 submit_btn = gr.Button("🚀 开始上传并处理")
-                clear_button = gr.ClearButton(value="清除界面")
+                clear_button = gr.ClearButton(value="🧹 恢复默认界面")
 
             with gr.Column():
                 with gr.Accordion("进程查询", open=False):
                     uuid_textbox = gr.Textbox(
-                        label="输入进程号",
+                        label="输入进程号-task_id",
                         info="eg:6ef43dd1-e471-447b-9058-5377fa6fcdeb",
                     )
                     query_progress_btn = gr.Button("查询进程")
@@ -354,7 +353,7 @@ def create_app():
                 output = gr.Textbox(label="结果", interactive=False)
 
         submit_btn.click(
-            save_files,
+            deal_upload_files,
             inputs=[file_input_list, table_name, chunk_size, chunk_overlap, tags_input],
             outputs=[output],
         )
